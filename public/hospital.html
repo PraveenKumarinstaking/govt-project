@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HAERMS Hospital Management Panel">
+    <title>HAERMS — Hospital Panel</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand"><span class="icon">🏥</span> Hospital Panel</div>
+        <div class="navbar-actions">
+            <span id="userName" class="text-muted" style="font-size:0.85rem;"></span>
+            <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="dash-header">
+            <h1>🏥 Hospital Management Panel</h1>
+            <p class="dash-subtitle">Monitor incoming emergencies and manage bed availability</p>
+        </div>
+
+        <!-- Hospital info & bed management -->
+        <div class="grid-3 mb-2">
+            <div class="stat-card">
+                <div class="stat-value" id="statBeds">—</div>
+                <div class="stat-label">Available Beds</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statIncoming">0</div>
+                <div class="stat-label">Incoming Patients</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statAdmitted">0</div>
+                <div class="stat-label">Admitted Today</div>
+            </div>
+        </div>
+
+        <!-- Bed controls -->
+        <div class="card mb-2">
+            <div class="flex-between">
+                <h3>🛏️ Bed Management</h3>
+                <div class="flex gap-2">
+                    <select class="select" id="hospitalSelect" style="width:auto; min-width:200px;">
+                        <option value="">Select Hospital...</option>
+                    </select>
+                    <button class="btn btn-warning btn-sm" id="toggleFullBtn" onclick="toggleFull()">Toggle Full
+                        Status</button>
+                </div>
+            </div>
+            <div class="flex gap-2 mt-2" style="align-items:flex-end;">
+                <div class="form-group" style="margin-bottom:0; flex:1;">
+                    <label for="bedCount">Update Available Beds</label>
+                    <input class="input" type="number" id="bedCount" min="0" placeholder="Enter bed count">
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="updateBeds()" style="height:42px;">Update</button>
+            </div>
+        </div>
+
+        <!-- Incoming alerts -->
+        <div class="card">
+            <div class="flex-between" style="margin-bottom:1rem;">
+                <h3>🚨 Incoming Emergencies</h3>
+                <button class="btn btn-ghost btn-sm" onclick="loadIncidents()">🔄 Refresh</button>
+            </div>
+
+            <div id="alertList">
+                <div class="text-center">
+                    <div class="spinner" style="margin:2rem auto;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/socket.js"></script>
+    <script>
+        const user = requireAuth(['HOSPITAL']);
+        if (user) document.getElementById('userName').textContent = user.name;
+
+        let hospitals = [], currentHospitalId = null, incidents = [];
+
+        // Load hospitals
+        async function loadHospitals() {
+            try {
+                const data = await apiRequest('/api/hospitals');
+                hospitals = data.hospitals;
+                const sel = document.getElementById('hospitalSelect');
+                sel.innerHTML = '<option value="">Select Hospital...</option>' +
+                    hospitals.map(h => `<option value="${h._id}">${h.name} (${h.availableBeds} beds)</option>`).join('');
+                // Auto-select first
+                if (hospitals.length > 0) {
+                    currentHospitalId = hospitals[0]._id;
+                    sel.value = currentHospitalId;
+                    updateHospitalInfo(hospitals[0]);
+                }
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        document.getElementById('hospitalSelect').addEventListener('change', (e) => {
+            currentHospitalId = e.target.value;
+            const h = hospitals.find(h => h._id === currentHospitalId);
+            if (h) updateHospitalInfo(h);
+        });
+
+        function updateHospitalInfo(h) {
+            document.getElementById('statBeds').textContent = h.availableBeds;
+            document.getElementById('bedCount').value = h.availableBeds;
+            document.getElementById('statBeds').style.color = h.isFull ? 'var(--accent-red)' : 'var(--accent-green)';
+        }
+
+        async function updateBeds() {
+            if (!currentHospitalId) return showToast('Select a hospital first', 'warning');
+            try {
+                const data = await apiRequest(`/api/hospitals/${currentHospitalId}/beds`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ availableBeds: parseInt(document.getElementById('bedCount').value) }),
+                });
+                showToast('Beds updated', 'success');
+                updateHospitalInfo(data.hospital);
+                loadHospitals();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        async function toggleFull() {
+            if (!currentHospitalId) return showToast('Select a hospital first', 'warning');
+            try {
+                const data = await apiRequest(`/api/hospitals/${currentHospitalId}/toggle-full`, { method: 'PATCH' });
+                showToast(data.hospital.isFull ? '🔴 Hospital marked as FULL' : '🟢 Hospital accepting patients', data.hospital.isFull ? 'warning' : 'success');
+                updateHospitalInfo(data.hospital);
+                loadHospitals();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        // Load incidents assigned to any hospital
+        async function loadIncidents() {
+            try {
+                const data = await apiRequest('/api/incidents');
+                incidents = data.incidents.filter(i => i.status !== 'CLOSED');
+                renderAlerts();
+                updateStats();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        function renderAlerts() {
+            const el = document.getElementById('alertList');
+            if (incidents.length === 0) {
+                el.innerHTML = '<p class="text-muted text-center" style="padding:2rem;">No incoming emergencies</p>';
+                return;
+            }
+            el.innerHTML = incidents.map(inc => `
+        <div class="incident-card" style="margin-bottom:0.75rem; ${inc.status === 'PATIENT_ADMITTED' ? 'border-left:3px solid var(--accent-amber);' : 'border-left:3px solid var(--accent-red);'}">
+          <div class="incident-header">
+            <span class="incident-type">${inc.accidentType} — ${inc.severity}</span>
+            ${statusBadge(inc.status)}
+          </div>
+          <div class="incident-meta">
+            📍 ${inc.location.lat.toFixed(4)}, ${inc.location.lng.toFixed(4)} · ⏰ ${formatDateTime(inc.createdAt)}
+          </div>
+          ${inc.patientInfo && inc.patientInfo.condition ? `<div class="mt-1" style="font-size:0.85rem;">🩺 Patient: <strong>${inc.patientInfo.condition}</strong> ${inc.patientInfo.notes ? '— ' + inc.patientInfo.notes : ''}</div>` : ''}
+          ${inc.assignedHospital ? `<div class="mt-1 text-muted" style="font-size:0.8rem;">🏥 Assigned to: ${inc.assignedHospital.name}</div>` : ''}
+          <div class="flex gap-1 mt-2">
+            ${inc.status !== 'PATIENT_ADMITTED' && inc.status !== 'CLOSED' ?
+                    `<button class="btn btn-success btn-sm" onclick="admitPatient('${inc._id}')">✅ Admit Patient</button>` : ''}
+            ${inc.status === 'PATIENT_ADMITTED' ?
+                    `<button class="btn btn-primary btn-sm" onclick="closeIncident('${inc._id}')">📋 Close Incident</button>` : ''}
+          </div>
+        </div>
+      `).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('statIncoming').textContent = incidents.filter(i => ['ASSIGNED', 'IN_PROGRESS'].includes(i.status)).length;
+            document.getElementById('statAdmitted').textContent = incidents.filter(i => i.status === 'PATIENT_ADMITTED').length;
+        }
+
+        async function admitPatient(id) {
+            try {
+                // Update incident status
+                await apiRequest(`/api/incidents/${id}/status`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ status: 'PATIENT_ADMITTED', note: 'Patient admitted to hospital' }),
+                });
+                // Decrement beds
+                if (currentHospitalId) {
+                    const data = await apiRequest(`/api/hospitals/${currentHospitalId}/admit`, { method: 'POST' });
+                    updateHospitalInfo(data.hospital);
+                }
+                showToast('Patient admitted successfully', 'success');
+                loadIncidents();
+                loadHospitals();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        async function closeIncident(id) {
+            try {
+                await apiRequest(`/api/incidents/${id}/status`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ status: 'CLOSED', note: 'Incident closed by hospital staff' }),
+                });
+                showToast('Incident closed', 'success');
+                loadIncidents();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        // Socket
+        const sock = initSocket('HOSPITAL');
+        sock.on('hospital:alert', () => {
+            showToast('🚨 Incoming emergency patient!', 'warning');
+            loadIncidents();
+        });
+        sock.on('incident:updated', () => loadIncidents());
+        sock.on('hospital:updated', (h) => {
+            if (h._id === currentHospitalId) updateHospitalInfo(h);
+            loadHospitals();
+        });
+
+        loadHospitals();
+        loadIncidents();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HAERMS Citizen SOS - Report highway accident emergencies">
+    <title>HAERMS — Emergency SOS</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <span class="icon">🚨</span> HAERMS
+        </div>
+        <div class="navbar-actions">
+            <button class="btn btn-ghost btn-sm" onclick="showProfile()" id="profileBtn">👤 <span id="userName"
+                    style="font-size:0.85rem;"></span></button>
+            <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- SOS View (default) -->
+        <div id="sosView">
+            <div class="text-center" style="margin-top: 3rem;">
+                <h1 style="color:var(--accent-red); margin-bottom:0.5rem;">⚠️ Emergency SOS</h1>
+                <p class="text-muted mb-2">Press the SOS button to report a highway accident</p>
+
+                <div id="locationStatus" class="alert-bar alert-info" style="max-width:500px; margin:1rem auto;">
+                    📍 Detecting your location...
+                </div>
+
+                <div class="flex-center" style="margin: 2rem 0;">
+                    <button class="sos-btn" id="sosBtn" onclick="triggerSOS()">SOS</button>
+                </div>
+
+                <div style="max-width:500px; margin:0 auto;">
+                    <div class="form-group">
+                        <label for="accidentType">Accident Type</label>
+                        <select class="select" id="accidentType">
+                            <option value="COLLISION">🚗 Vehicle Collision</option>
+                            <option value="ROLLOVER">🔄 Vehicle Rollover</option>
+                            <option value="PEDESTRIAN">🚶 Pedestrian Hit</option>
+                            <option value="MEDICAL">🏥 Medical Emergency</option>
+                            <option value="FIRE">🔥 Vehicle Fire</option>
+                            <option value="OTHER">❓ Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="severity">Severity</label>
+                        <select class="select" id="severity">
+                            <option value="MEDIUM">⚠️ Medium</option>
+                            <option value="HIGH">🔶 High</option>
+                            <option value="CRITICAL">🔴 Critical</option>
+                            <option value="LOW">🟢 Low</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tracking View (after SOS) -->
+        <div id="trackingView" class="hidden">
+            <div class="alert-bar alert-success">
+                ✅ Emergency reported! Help is on the way.
+            </div>
+
+            <div class="grid-2">
+                <div>
+                    <div class="card">
+                        <h3 style="margin-bottom:1rem;">📍 Incident Location</h3>
+                        <div class="map-container" id="trackingMap"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="card" style="margin-bottom:1rem;">
+                        <h3 style="margin-bottom:1rem;">🚔 Assigned Resources</h3>
+                        <div id="assignedResources">
+                            <p class="text-muted">Locating nearest units...</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 style="margin-bottom:1rem;">📋 Incident Status</h3>
+                        <div id="incidentStatus">
+                            <div class="text-center">
+                                <div class="spinner" style="margin:1rem auto;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card mt-2">
+                        <h3 style="margin-bottom:1rem;">📜 Timeline</h3>
+                        <div class="timeline" id="incidentTimeline"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profileModal" class="hidden"
+        style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;"
+        onclick="event.target===this && closeProfile()">
+        <div class="card" style="max-width:500px;width:100%;max-height:85vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+                <h2 style="color:var(--accent-cyan);">👤 My Profile</h2>
+                <button class="btn btn-ghost btn-sm" onclick="closeProfile()">✕</button>
+            </div>
+
+            <!-- View Mode -->
+            <div id="profileView">
+                <div style="text-align:center;margin-bottom:1.5rem;">
+                    <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--accent-blue),var(--accent-cyan));display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:2rem;"
+                        id="profileAvatar">👤</div>
+                    <h3 id="profileName" style="margin-bottom:0.25rem;"></h3>
+                    <span class="text-muted" id="profileRole" style="font-size:0.8rem;"></span>
+                </div>
+
+                <div style="display:grid;gap:0.75rem;">
+                    <div style="padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:10px;">
+                        <div class="text-muted" style="font-size:0.75rem;">📧 Email</div>
+                        <div id="profileEmail" style="font-weight:500;"></div>
+                    </div>
+                    <div style="padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:10px;">
+                        <div class="text-muted" style="font-size:0.75rem;">📱 Mobile</div>
+                        <div id="profileMobile" style="font-weight:500;"></div>
+                    </div>
+                    <div style="padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:10px;">
+                        <div class="text-muted" style="font-size:0.75rem;">🏠 Address</div>
+                        <div id="profileAddress" style="font-weight:500;"></div>
+                    </div>
+                    <div style="padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:10px;">
+                        <div class="text-muted" style="font-size:0.75rem;">💼 Occupation</div>
+                        <div id="profileWork" style="font-weight:500;"></div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" style="width:100%;margin-top:1.5rem;" onclick="toggleEditMode()">✏️ Edit
+                    Profile</button>
+            </div>
+
+            <!-- Edit Mode -->
+            <div id="profileEdit" class="hidden">
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input class="input" type="text" id="editName" placeholder="Your name">
+                </div>
+                <div class="form-group">
+                    <label>📱 Mobile Number</label>
+                    <input class="input" type="tel" id="editMobile" placeholder="Your mobile number">
+                </div>
+                <div class="form-group">
+                    <label>🏠 Address</label>
+                    <textarea class="input" id="editAddress" rows="2" placeholder="Your address"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>💼 Occupation</label>
+                    <input class="input" type="text" id="editWork" placeholder="Your occupation">
+                </div>
+                <div style="display:flex;gap:0.75rem;margin-top:1.5rem;">
+                    <button class="btn btn-ghost" style="flex:1;" onclick="toggleEditMode()">Cancel</button>
+                    <button class="btn btn-success" style="flex:1;" onclick="saveProfile()">💾 Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/socket.js"></script>
+    <script>
+        const user = requireAuth(['CITIZEN']);
+        if (user) {
+            document.getElementById('userName').textContent = user.name;
+        }
+
+        let myLocation = { lat: 13.0827, lng: 80.2707 }; // default Chennai
+        let currentIncidentId = null;
+        let trackingMap = null;
+
+        // Get GPS location
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    document.getElementById('locationStatus').innerHTML = `📍 Location captured: ${myLocation.lat.toFixed(5)}, ${myLocation.lng.toFixed(5)}`;
+                    document.getElementById('locationStatus').className = 'alert-bar alert-success';
+                },
+                (err) => {
+                    document.getElementById('locationStatus').innerHTML = `⚠️ Using default location (GPS unavailable)`;
+                    document.getElementById('locationStatus').className = 'alert-bar alert-warning';
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        // SOS trigger
+        async function triggerSOS() {
+            const btn = document.getElementById('sosBtn');
+            btn.textContent = '...';
+            btn.disabled = true;
+
+            try {
+                const data = await apiRequest('/api/incidents', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        location: myLocation,
+                        accidentType: document.getElementById('accidentType').value,
+                        severity: document.getElementById('severity').value,
+                    }),
+                });
+
+                currentIncidentId = data.incident._id;
+                showToast('🚨 SOS sent! Help is being dispatched.', 'success');
+                showTrackingView(data.incident);
+            } catch (err) {
+                showToast(err.message, 'error');
+                btn.textContent = 'SOS';
+                btn.disabled = false;
+            }
+        }
+
+        // Live tracking markers
+        let policeMarker = null, ambulanceMarker = null, hospitalMarker = null;
+        let livePoliceId = null, liveAmbulanceId = null;
+        let trackingInterval = null;
+
+        function showTrackingView(incident) {
+            document.getElementById('sosView').classList.add('hidden');
+            document.getElementById('trackingView').classList.remove('hidden');
+
+            // Store assigned IDs for live tracking
+            livePoliceId = incident.assignedPolice ? (incident.assignedPolice._id || incident.assignedPolice) : null;
+            liveAmbulanceId = incident.assignedAmbulance ? (incident.assignedAmbulance._id || incident.assignedAmbulance) : null;
+
+            // Init map
+            setTimeout(() => {
+                trackingMap = L.map('trackingMap').setView([incident.location.lat, incident.location.lng], 14);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap'
+                }).addTo(trackingMap);
+
+                // Incident marker (static red pulse)
+                L.marker([incident.location.lat, incident.location.lng], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: '<div style="font-size:2rem; filter:drop-shadow(0 0 8px rgba(239,68,68,0.7));">🚨</div>',
+                        iconSize: [30, 30], iconAnchor: [15, 15]
+                    })
+                }).addTo(trackingMap).bindPopup('<b>📍 Incident Location</b><br>Your reported emergency');
+
+                // Police marker (live-tracking)
+                if (incident.assignedPolice && incident.assignedPolice.location) {
+                    policeMarker = L.marker([incident.assignedPolice.location.lat, incident.assignedPolice.location.lng], {
+                        icon: L.divIcon({
+                            className: '',
+                            html: '<div style="font-size:1.8rem; filter:drop-shadow(0 0 6px rgba(59,130,246,0.6)); transition:all 0.5s;">🚔</div>',
+                            iconSize: [28, 28], iconAnchor: [14, 14]
+                        })
+                    }).addTo(trackingMap).bindPopup(`<b>🚔 ${incident.assignedPolice.name}</b><br><span id="policeETA">Tracking live...</span>`);
+                }
+
+                // Ambulance marker (live-tracking)
+                if (incident.assignedAmbulance && incident.assignedAmbulance.location) {
+                    ambulanceMarker = L.marker([incident.assignedAmbulance.location.lat, incident.assignedAmbulance.location.lng], {
+                        icon: L.divIcon({
+                            className: '',
+                            html: '<div style="font-size:1.8rem; filter:drop-shadow(0 0 6px rgba(34,197,94,0.6)); transition:all 0.5s;">🚑</div>',
+                            iconSize: [28, 28], iconAnchor: [14, 14]
+                        })
+                    }).addTo(trackingMap).bindPopup(`<b>🚑 ${incident.assignedAmbulance.name}</b><br><span id="ambETA">Tracking live...</span>`);
+                }
+
+                // Hospital marker
+                if (incident.assignedHospital && incident.assignedHospital.location) {
+                    hospitalMarker = L.marker([incident.assignedHospital.location.lat, incident.assignedHospital.location.lng], {
+                        icon: L.divIcon({
+                            className: '',
+                            html: '<div style="font-size:1.5rem;">🏥</div>',
+                            iconSize: [24, 24], iconAnchor: [12, 12]
+                        })
+                    }).addTo(trackingMap).bindPopup(`<b>🏥 ${incident.assignedHospital.name}</b><br>${incident.assignedHospital.availableBeds} beds available`);
+                }
+
+                // Fit all markers in view
+                const bounds = [[incident.location.lat, incident.location.lng]];
+                if (policeMarker) bounds.push(policeMarker.getLatLng());
+                if (ambulanceMarker) bounds.push(ambulanceMarker.getLatLng());
+                if (hospitalMarker) bounds.push(hospitalMarker.getLatLng());
+                if (bounds.length > 1) trackingMap.fitBounds(bounds, { padding: [40, 40] });
+
+            }, 200);
+
+            updateResources(incident);
+            updateTimeline(incident);
+            updateStatus(incident);
+
+            // Start live polling for incident updates every 5s
+            trackingInterval = setInterval(async () => {
+                if (!currentIncidentId) return;
+                try {
+                    const data = await apiRequest(`/api/incidents/${currentIncidentId}`);
+                    if (data.incident) {
+                        updateResources(data.incident);
+                        updateStatus(data.incident);
+                        updateTimeline(data.incident);
+                        updateLiveMarkers(data.incident);
+                    }
+                } catch (e) { /* silent retry */ }
+            }, 5000);
+        }
+
+        // Smoothly move markers to new positions
+        function updateLiveMarkers(incident) {
+            if (!trackingMap) return;
+
+            if (policeMarker && incident.assignedPolice && incident.assignedPolice.location) {
+                const newPos = [incident.assignedPolice.location.lat, incident.assignedPolice.location.lng];
+                animateMarker(policeMarker, newPos);
+                const dist = calcDist(incident.location, incident.assignedPolice.location);
+                policeMarker.setPopupContent(`<b>🚔 ${incident.assignedPolice.name}</b><br>📏 ${dist} km away`);
+            }
+
+            if (ambulanceMarker && incident.assignedAmbulance && incident.assignedAmbulance.location) {
+                const newPos = [incident.assignedAmbulance.location.lat, incident.assignedAmbulance.location.lng];
+                animateMarker(ambulanceMarker, newPos);
+                const dist = calcDist(incident.location, incident.assignedAmbulance.location);
+                ambulanceMarker.setPopupContent(`<b>🚑 ${incident.assignedAmbulance.name}</b><br>📏 ${dist} km away`);
+            }
+        }
+
+        // Animate marker movement for smooth tracking
+        function animateMarker(marker, newLatLng, duration = 1000) {
+            const start = marker.getLatLng();
+            const startTime = performance.now();
+
+            function step(timestamp) {
+                const progress = Math.min((timestamp - startTime) / duration, 1);
+                const ease = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress; // easeInOut
+                const lat = start.lat + (newLatLng[0] - start.lat) * ease;
+                const lng = start.lng + (newLatLng[1] - start.lng) * ease;
+                marker.setLatLng([lat, lng]);
+                if (progress < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        // Simple distance calc for display
+        function calcDist(loc1, loc2) {
+            const R = 6371;
+            const dLat = (loc2.lat - loc1.lat) * Math.PI / 180;
+            const dLng = (loc2.lng - loc1.lng) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(loc1.lat * Math.PI / 180) * Math.cos(loc2.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+            return (2 * R * Math.asin(Math.sqrt(a))).toFixed(1);
+        }
+
+        function updateResources(incident) {
+            const el = document.getElementById('assignedResources');
+            let html = '';
+            if (incident.assignedPolice) {
+                const dist = incident.assignedPolice.location ?
+                    calcDist(incident.location, incident.assignedPolice.location) : '?';
+                html += `<div class="incident-card" style="margin-bottom:0.5rem;">
+          <div class="flex-between"><span>🚔 ${incident.assignedPolice.name}</span>${statusBadge(incident.assignedPolice.status || 'BUSY')}</div>
+          <div class="text-muted" style="font-size:0.8rem; margin-top:0.25rem;">📏 ${dist} km away · 📡 Live tracking</div>
+        </div>`;
+            }
+            if (incident.assignedAmbulance) {
+                const dist = incident.assignedAmbulance.location ?
+                    calcDist(incident.location, incident.assignedAmbulance.location) : '?';
+                html += `<div class="incident-card" style="margin-bottom:0.5rem;">
+          <div class="flex-between"><span>🚑 ${incident.assignedAmbulance.name}</span>${statusBadge(incident.assignedAmbulance.status || 'BUSY')}</div>
+          <div class="text-muted" style="font-size:0.8rem; margin-top:0.25rem;">📏 ${dist} km away · 📡 Live tracking</div>
+        </div>`;
+            }
+            if (incident.assignedHospital) {
+                const dist = incident.assignedHospital.location ?
+                    calcDist(incident.location, incident.assignedHospital.location) : '?';
+                html += `<div class="incident-card" style="margin-bottom:0.5rem;">
+          <div class="flex-between"><span>🏥 ${incident.assignedHospital.name}</span><span class="text-muted">${incident.assignedHospital.availableBeds} beds</span></div>
+          <div class="text-muted" style="font-size:0.8rem; margin-top:0.25rem;">📏 ${dist} km away</div>
+        </div>`;
+            }
+            if (!html) html = '<p class="text-muted">Assigning resources...</p>';
+            el.innerHTML = html;
+        }
+
+        function updateStatus(incident) {
+            const statusIcons = { NEW: '🆕', ASSIGNED: '📋', IN_PROGRESS: '🚗', PATIENT_ADMITTED: '🏥', CLOSED: '✅' };
+            document.getElementById('incidentStatus').innerHTML = `
+        <div class="flex-between">
+          <span>${statusIcons[incident.status] || '📋'} Current Status</span>
+          ${statusBadge(incident.status)}
+        </div>
+        <p class="text-muted mt-1" style="font-size:0.8rem;">Incident ID: ${incident._id}</p>
+        <div class="alert-bar ${incident.status === 'CLOSED' ? 'alert-success' : 'alert-info'} mt-1" style="font-size:0.8rem;">
+          ${incident.status === 'CLOSED' ? '✅ Incident resolved. You are safe.' :
+                    incident.status === 'PATIENT_ADMITTED' ? '🏥 Patient admitted. Medical care in progress.' :
+                        incident.status === 'IN_PROGRESS' ? '🚗 Responders are on scene.' :
+                            incident.status === 'ASSIGNED' ? '📡 Units dispatched. Tracking in real-time.' : '⏳ Processing your emergency...'}
+        </div>
+      `;
+        }
+
+        function updateTimeline(incident) {
+            const el = document.getElementById('incidentTimeline');
+            if (!incident.timeline || incident.timeline.length === 0) {
+                el.innerHTML = '<p class="text-muted">No updates yet</p>';
+                return;
+            }
+            el.innerHTML = incident.timeline.map(t => `
+        <div class="timeline-item">
+          <div class="timeline-time">${formatDateTime(t.timestamp)}</div>
+          <div class="timeline-text">${t.note || t.status}</div>
+        </div>
+      `).join('');
+        }
+
+        // Socket.IO real-time updates
+        const sock = initSocket('CITIZEN');
+
+        // Live incident status changes
+        sock.on('incident:updated', (incident) => {
+            if (currentIncidentId && incident._id === currentIncidentId) {
+                updateResources(incident);
+                updateTimeline(incident);
+                updateStatus(incident);
+                updateLiveMarkers(incident);
+                showToast(`Status updated: ${incident.status.replace('_', ' ')}`, 'info');
+
+                if (incident.status === 'CLOSED' && trackingInterval) {
+                    clearInterval(trackingInterval);
+                }
+            }
+        });
+
+        // Live location updates from responders
+        sock.on('user:locationUpdate', (data) => {
+            if (!trackingMap) return;
+            if (data.userId === livePoliceId && policeMarker) {
+                animateMarker(policeMarker, [data.location.lat, data.location.lng]);
+            }
+            if (data.userId === liveAmbulanceId && ambulanceMarker) {
+                animateMarker(ambulanceMarker, [data.location.lat, data.location.lng]);
+            }
+        });
+
+        // ── Profile Functions ──
+        async function showProfile() {
+            document.getElementById('profileModal').classList.remove('hidden');
+            document.getElementById('profileModal').style.display = 'flex';
+            document.getElementById('profileView').classList.remove('hidden');
+            document.getElementById('profileEdit').classList.add('hidden');
+            try {
+                const data = await apiRequest('/api/users/profile');
+                const p = data.user;
+                document.getElementById('profileName').textContent = p.name || 'N/A';
+                document.getElementById('profileRole').textContent = p.role || '';
+                document.getElementById('profileEmail').textContent = p.email || 'N/A';
+                document.getElementById('profileMobile').textContent = p.mobile || 'Not provided';
+                document.getElementById('profileAddress').textContent = p.address || 'Not provided';
+                document.getElementById('profileWork').textContent = p.work || 'Not provided';
+                // Pre-fill edit fields
+                document.getElementById('editName').value = p.name || '';
+                document.getElementById('editMobile').value = p.mobile || '';
+                document.getElementById('editAddress').value = p.address || '';
+                document.getElementById('editWork').value = p.work || '';
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        function closeProfile() {
+            document.getElementById('profileModal').classList.add('hidden');
+            document.getElementById('profileModal').style.display = 'none';
+        }
+
+        function toggleEditMode() {
+            const view = document.getElementById('profileView');
+            const edit = document.getElementById('profileEdit');
+            view.classList.toggle('hidden');
+            edit.classList.toggle('hidden');
+        }
+
+        async function saveProfile() {
+            try {
+                const body = {
+                    name: document.getElementById('editName').value.trim(),
+                    mobile: document.getElementById('editMobile').value.trim(),
+                    address: document.getElementById('editAddress').value.trim(),
+                    work: document.getElementById('editWork').value.trim(),
+                };
+                const data = await apiRequest('/api/users/profile', {
+                    method: 'PATCH',
+                    body: JSON.stringify(body),
+                });
+                // Update localStorage user
+                const stored = JSON.parse(localStorage.getItem('haerms_user') || '{}');
+                stored.name = data.user.name;
+                stored.mobile = data.user.mobile;
+                stored.address = data.user.address;
+                stored.work = data.user.work;
+                localStorage.setItem('haerms_user', JSON.stringify(stored));
+                document.getElementById('userName').textContent = data.user.name;
+                showToast('✅ Profile updated successfully!', 'success');
+                showProfile(); // refresh view
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+    </script>
+</body>
+
+</html>

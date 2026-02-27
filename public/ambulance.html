@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HAERMS Ambulance Dispatch Dashboard">
+    <title>HAERMS — Ambulance Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand"><span class="icon">🚑</span> Ambulance Dashboard</div>
+        <div class="navbar-actions">
+            <span id="statusBadge"></span>
+            <select class="select" id="myStatus" style="width:auto; padding:0.4rem 0.8rem; font-size:0.8rem;">
+                <option value="AVAILABLE">Available</option>
+                <option value="BUSY">Busy</option>
+                <option value="OFFLINE">Offline</option>
+            </select>
+            <span id="userName" class="text-muted" style="font-size:0.85rem;"></span>
+            <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="dash-header">
+            <h1>🚑 Ambulance Unit Dashboard</h1>
+            <p class="dash-subtitle">Dispatch, navigate, triage, and transport</p>
+        </div>
+
+        <div class="grid-4 mb-2">
+            <div class="stat-card">
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">Total Dispatches</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statActive">0</div>
+                <div class="stat-label">Active</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statTransport">0</div>
+                <div class="stat-label">In Transport</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statComplete">0</div>
+                <div class="stat-label">Completed</div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="card">
+                <h3 style="margin-bottom:1rem;">📍 Navigation Map</h3>
+                <div class="map-container map-large" id="ambMap"></div>
+            </div>
+            <div>
+                <div class="card">
+                    <div class="flex-between" style="margin-bottom:1rem;">
+                        <h3>📋 My Dispatches</h3>
+                        <button class="btn btn-ghost btn-sm" onclick="loadIncidents()">🔄 Refresh</button>
+                    </div>
+                    <div id="incidentList">
+                        <div class="text-center">
+                            <div class="spinner" style="margin:2rem auto;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail Modal -->
+        <div id="incidentDetail" class="hidden"
+            style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center;padding:2rem;">
+            <div class="card" style="max-width:650px;width:100%;max-height:85vh;overflow-y:auto;">
+                <div class="flex-between" style="margin-bottom:1rem;">
+                    <h3>🚨 Dispatch Details</h3>
+                    <button class="btn btn-ghost btn-sm" onclick="closeDetail()">✕</button>
+                </div>
+                <div id="detailContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/socket.js"></script>
+    <script>
+        const user = requireAuth(['AMBULANCE']);
+        if (user) {
+            document.getElementById('userName').textContent = user.name;
+            document.getElementById('myStatus').value = user.status || 'AVAILABLE';
+            document.getElementById('statusBadge').innerHTML = statusBadge(user.status || 'AVAILABLE');
+        }
+
+        let ambMap, incidents = [], markers = {};
+
+        ambMap = L.map('ambMap').setView([13.0827, 80.2707], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(ambMap);
+
+        document.getElementById('myStatus').addEventListener('change', async (e) => {
+            try {
+                await apiRequest('/api/users/status', { method: 'PATCH', body: JSON.stringify({ status: e.target.value }) });
+                document.getElementById('statusBadge').innerHTML = statusBadge(e.target.value);
+                showToast(`Status: ${e.target.value}`, 'success');
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        async function loadIncidents() {
+            try {
+                const data = await apiRequest('/api/incidents');
+                incidents = data.incidents;
+                renderIncidents();
+                updateStats();
+                updateMap();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        function renderIncidents() {
+            const el = document.getElementById('incidentList');
+            if (incidents.length === 0) {
+                el.innerHTML = '<p class="text-muted text-center" style="padding:2rem;">No dispatches</p>';
+                return;
+            }
+            el.innerHTML = incidents.map(inc => `
+        <div class="incident-card" style="margin-bottom:0.75rem;" onclick="showDetail('${inc._id}')">
+          <div class="incident-header">
+            <span class="incident-type">${inc.accidentType}</span>
+            ${statusBadge(inc.status)}
+          </div>
+          <div class="incident-meta">
+            📍 ${inc.location.lat.toFixed(4)}, ${inc.location.lng.toFixed(4)} · ⏰ ${formatDateTime(inc.createdAt)}
+          </div>
+          ${inc.assignedHospital ? `<div class="incident-meta mt-1">🏥 ${inc.assignedHospital.name}</div>` : ''}
+        </div>
+      `).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('statTotal').textContent = incidents.length;
+            document.getElementById('statActive').textContent = incidents.filter(i => ['ASSIGNED', 'IN_PROGRESS'].includes(i.status)).length;
+            document.getElementById('statTransport').textContent = incidents.filter(i => i.status === 'IN_PROGRESS').length;
+            document.getElementById('statComplete').textContent = incidents.filter(i => ['PATIENT_ADMITTED', 'CLOSED'].includes(i.status)).length;
+        }
+
+        function updateMap() {
+            Object.values(markers).forEach(m => ambMap.removeLayer(m));
+            markers = {};
+            incidents.forEach(inc => {
+                const m = L.marker([inc.location.lat, inc.location.lng], {
+                    icon: L.divIcon({ className: '', html: `<div style="font-size:1.5rem;">${inc.status === 'CLOSED' ? '✅' : '🚨'}</div>`, iconSize: [25, 25] })
+                }).addTo(ambMap).bindPopup(`${inc.accidentType} — ${inc.status}`);
+                markers[inc._id] = m;
+                if (inc.assignedHospital) {
+                    L.marker([inc.assignedHospital.location.lat, inc.assignedHospital.location.lng], {
+                        icon: L.divIcon({ className: '', html: '<div style="font-size:1.3rem;">🏥</div>', iconSize: [22, 22] })
+                    }).addTo(ambMap).bindPopup(inc.assignedHospital.name);
+                }
+            });
+            if (incidents.length > 0) {
+                ambMap.fitBounds(incidents.map(i => [i.location.lat, i.location.lng]), { padding: [30, 30] });
+            }
+        }
+
+        async function showDetail(id) {
+            const inc = incidents.find(i => i._id === id);
+            if (!inc) return;
+
+            // Load nearby hospitals
+            let hospitalsHTML = '';
+            try {
+                const hData = await apiRequest(`/api/hospitals/nearby?lat=${inc.location.lat}&lng=${inc.location.lng}&limit=5`);
+                hospitalsHTML = hData.hospitals.map(h => `
+          <div class="incident-card" style="margin-bottom:0.5rem; ${inc.assignedHospital && inc.assignedHospital._id === h._id ? 'border-color:var(--accent-green);' : ''}">
+            <div class="flex-between">
+              <span>🏥 ${h.name}</span>
+              <span class="text-muted">${h.distance} km</span>
+            </div>
+            <div class="flex-between mt-1">
+              <span class="text-muted" style="font-size:0.8rem;">${h.availableBeds} beds available</span>
+              ${(!inc.assignedHospital || inc.assignedHospital._id !== h._id) && inc.status !== 'CLOSED' ?
+                        `<button class="btn btn-ghost btn-sm" onclick="reassignHospital('${inc._id}','${h._id}')">Assign</button>` :
+                        '<span class="badge badge-available">Assigned</span>'}
+            </div>
+          </div>
+        `).join('');
+            } catch (e) { hospitalsHTML = '<p class="text-muted">Could not load hospitals</p>'; }
+
+            const nextActions = {
+                ASSIGNED: { label: '🚗 Arrived on Scene', status: 'IN_PROGRESS' },
+                IN_PROGRESS: { label: '🚑 Start Transport to Hospital', status: 'PATIENT_ADMITTED' },
+            };
+            const action = nextActions[inc.status];
+
+            document.getElementById('detailContent').innerHTML = `
+        <div class="flex-between mb-2">${statusBadge(inc.status)}<span class="text-muted" style="font-size:0.8rem;">${formatDateTime(inc.createdAt)}</span></div>
+        <div class="incident-card" style="margin-bottom:1rem;">
+          <p><strong>Type:</strong> ${inc.accidentType} · <strong>Severity:</strong> ${inc.severity}</p>
+          <p><strong>Location:</strong> ${inc.location.lat.toFixed(5)}, ${inc.location.lng.toFixed(5)}</p>
+        </div>
+
+        ${inc.status === 'IN_PROGRESS' || inc.status === 'ASSIGNED' ? `
+        <div class="card" style="margin-bottom:1rem;">
+          <h3 style="margin-bottom:0.75rem;">🩺 Patient Triage</h3>
+          <div class="form-group">
+            <label>Patient Condition</label>
+            <select class="select" id="patientCondition">
+              <option value="Stable">Stable</option>
+              <option value="Moderate">Moderate</option>
+              <option value="Critical">Critical</option>
+              <option value="Unknown">Unknown</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Notes</label>
+            <input class="input" id="patientNotes" placeholder="Additional notes...">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="updatePatient('${inc._id}')">Save Triage Data</button>
+        </div>` : ''}
+
+        <h3 style="margin:1rem 0 0.5rem;">🏥 Nearby Hospitals</h3>
+        ${hospitalsHTML}
+
+        <h3 style="margin:1rem 0 0.5rem;">📜 Timeline</h3>
+        <div class="timeline">
+          ${(inc.timeline || []).map(t => `<div class="timeline-item"><div class="timeline-time">${formatDateTime(t.timestamp)}</div><div class="timeline-text">${t.note || t.status}</div></div>`).join('')}
+        </div>
+
+        ${action ? `<button class="btn btn-success btn-lg mt-3" style="width:100%;" onclick="advanceStatus('${inc._id}','${action.status}')">${action.label}</button>` : ''}
+        ${inc.status === 'PATIENT_ADMITTED' || inc.status === 'CLOSED' ? '<div class="alert-bar alert-success mt-3">✅ Patient admitted / Incident resolved</div>' : ''}
+      `;
+            document.getElementById('incidentDetail').classList.remove('hidden');
+            document.getElementById('incidentDetail').style.display = 'flex';
+        }
+
+        function closeDetail() {
+            document.getElementById('incidentDetail').classList.add('hidden');
+            document.getElementById('incidentDetail').style.display = 'none';
+        }
+
+        async function advanceStatus(id, status) {
+            try {
+                await apiRequest(`/api/incidents/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, note: `Ambulance: ${status.replace(/_/g, ' ')}` }) });
+                showToast(`Status: ${status}`, 'success');
+                closeDetail();
+                loadIncidents();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        async function updatePatient(id) {
+            try {
+                await apiRequest(`/api/incidents/${id}/patient`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        condition: document.getElementById('patientCondition').value,
+                        notes: document.getElementById('patientNotes').value,
+                    }),
+                });
+                showToast('Patient data saved', 'success');
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        async function reassignHospital(incId, hospId) {
+            try {
+                await apiRequest(`/api/incidents/${incId}/hospital`, { method: 'PATCH', body: JSON.stringify({ hospitalId: hospId }) });
+                showToast('Hospital reassigned', 'success');
+                closeDetail();
+                loadIncidents();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        // Socket
+        const sock = initSocket('AMBULANCE');
+        sock.on('ambulance:assignment', (data) => {
+            if (data.ambulanceId === user.id) {
+                showToast('🚨 NEW DISPATCH! Check your dashboard.', 'warning');
+                try { new Audio('data:audio/wav;base64,UklGRl9vT19telephones...').play(); } catch (e) { }
+                loadIncidents();
+            }
+        });
+        sock.on('incident:updated', () => loadIncidents());
+        sock.on('incident:new', () => loadIncidents());
+
+        // GPS Live Broadcasting
+        let myMarker = null;
+        let myLocation = null;
+
+        function startGPSTracking() {
+            if (!navigator.geolocation) {
+                showToast('⚠️ GPS not available', 'warning');
+                return;
+            }
+
+            navigator.geolocation.watchPosition(
+                (pos) => {
+                    myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+
+                    // Update own marker on map
+                    if (myMarker) {
+                        myMarker.setLatLng([myLocation.lat, myLocation.lng]);
+                    } else {
+                        myMarker = L.marker([myLocation.lat, myLocation.lng], {
+                            icon: L.divIcon({
+                                className: '',
+                                html: `<div style="font-size:1.3rem; background:rgba(34,197,94,0.3); border-radius:50%; padding:4px; animation: sosPulse 2s infinite;">🚑</div>`,
+                                iconSize: [30, 30], iconAnchor: [15, 15]
+                            })
+                        }).addTo(ambMap).bindPopup('<b>📍 Your Location</b>');
+                    }
+
+                    // Broadcast via Socket.IO
+                    sock.emit('location:update', {
+                        userId: user.id,
+                        location: myLocation,
+                        role: 'AMBULANCE'
+                    });
+
+                    // Also update via API
+                    apiRequest('/api/users/location', {
+                        method: 'PATCH',
+                        body: JSON.stringify(myLocation)
+                    }).catch(() => { });
+                },
+                (err) => {
+                    console.log('GPS error:', err.message);
+                },
+                { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+            );
+        }
+
+        startGPSTracking();
+
+        // Broadcast location every 5s
+        setInterval(() => {
+            if (myLocation && sock.connected) {
+                sock.emit('location:update', {
+                    userId: user.id,
+                    location: myLocation,
+                    role: 'AMBULANCE'
+                });
+            }
+        }, 5000);
+
+        loadIncidents();
+    </script>
+</body>
+
+</html>

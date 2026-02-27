@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HAERMS - Highway Accident Emergency Response Management System Login">
+    <title>HAERMS — Login</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .tab-switch {
+            display: flex;
+            gap: 0;
+            margin-bottom: 1.5rem;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .tab-switch button {
+            flex: 1;
+            padding: 0.65rem;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab-switch button.active {
+            background: var(--accent-blue);
+            color: #fff;
+        }
+
+        .tab-switch button:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        @media (max-width: 480px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .register-fields {
+            display: none;
+        }
+
+        .register-fields.show {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-wrapper">
+        <div class="card login-card" style="max-width: 440px;">
+            <div class="login-header">
+                <div class="logo-icon">🚨</div>
+                <h1>HAERMS</h1>
+                <p>Highway Accident Emergency Response</p>
+            </div>
+
+            <!-- Tab Switch -->
+            <div class="tab-switch">
+                <button id="tabLogin" class="active" onclick="switchTab('login')">Sign In</button>
+                <button id="tabRegister" onclick="switchTab('register')">Register</button>
+            </div>
+
+            <form id="authForm">
+                <!-- Register-only fields -->
+                <div class="register-fields" id="registerFields">
+                    <div class="form-group">
+                        <label for="regName">👤 Full Name</label>
+                        <input class="input" type="text" id="regName" placeholder="Enter your full name">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="regMobile">📱 Mobile Number</label>
+                            <input class="input" type="tel" id="regMobile" placeholder="e.g. 9876543210">
+                        </div>
+                        <div class="form-group">
+                            <label for="regWork">💼 Occupation</label>
+                            <input class="input" type="text" id="regWork" placeholder="e.g. Driver, Teacher">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="regAddress">🏠 Address</label>
+                        <input class="input" type="text" id="regAddress" placeholder="Enter your address">
+                    </div>
+                </div>
+
+                <!-- Common fields -->
+                <div class="form-group">
+                    <label for="email">✉️ Email</label>
+                    <input class="input" type="email" id="email" placeholder="Enter your email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">🔒 Password</label>
+                    <input class="input" type="password" id="password" placeholder="Enter your password" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg" style="width:100%" id="authBtn">
+                    Sign In
+                </button>
+            </form>
+
+            <div class="mt-3 text-center" style="font-size:0.8rem; color:var(--text-muted);">
+                <p style="margin-bottom:0.75rem;">Demo Accounts (password: <strong>1234</strong>)</p>
+                <div style="display:flex; flex-wrap:wrap; gap:0.5rem; justify-content:center;">
+                    <button class="btn btn-ghost btn-sm demo-btn" data-email="citizen@demo.com">Citizen</button>
+                    <button class="btn btn-ghost btn-sm demo-btn" data-email="police1@demo.com">Police</button>
+                    <button class="btn btn-ghost btn-sm demo-btn" data-email="ambulance1@demo.com">Ambulance</button>
+                    <button class="btn btn-ghost btn-sm demo-btn" data-email="hospital@demo.com">Hospital</button>
+                    <button class="btn btn-ghost btn-sm demo-btn" data-email="admin@demo.com">Admin</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+        let mode = 'login'; // 'login' or 'register'
+
+        // If already logged in, redirect
+        const existing = getUser();
+        if (existing && getToken()) redirectByRole(existing.role);
+
+        function switchTab(tab) {
+            mode = tab;
+            const regFields = document.getElementById('registerFields');
+            const btn = document.getElementById('authBtn');
+            const tabLogin = document.getElementById('tabLogin');
+            const tabRegister = document.getElementById('tabRegister');
+
+            if (tab === 'register') {
+                regFields.classList.add('show');
+                btn.textContent = 'Create Account';
+                tabRegister.classList.add('active');
+                tabLogin.classList.remove('active');
+                // Make register fields required
+                document.getElementById('regName').required = true;
+                document.getElementById('regMobile').required = true;
+            } else {
+                regFields.classList.remove('show');
+                btn.textContent = 'Sign In';
+                tabLogin.classList.add('active');
+                tabRegister.classList.remove('active');
+                document.getElementById('regName').required = false;
+                document.getElementById('regMobile').required = false;
+            }
+        }
+
+        // Demo buttons
+        document.querySelectorAll('.demo-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                switchTab('login');
+                document.getElementById('email').value = btn.dataset.email;
+                document.getElementById('password').value = '1234';
+            });
+        });
+
+        // Auth form
+        document.getElementById('authForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('authBtn');
+            btn.textContent = mode === 'login' ? 'Signing in...' : 'Creating account...';
+            btn.disabled = true;
+
+            try {
+                if (mode === 'register') {
+                    // Register
+                    const data = await apiRequest('/api/auth/register', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            name: document.getElementById('regName').value,
+                            email: document.getElementById('email').value,
+                            mobile: document.getElementById('regMobile').value,
+                            address: document.getElementById('regAddress').value,
+                            work: document.getElementById('regWork').value,
+                            password: document.getElementById('password').value,
+                            role: 'CITIZEN',
+                        }),
+                    });
+                    saveAuth(data.token, data.user);
+                    showToast('✅ Account created! Welcome to HAERMS.', 'success');
+                    setTimeout(() => redirectByRole(data.user.role), 500);
+                } else {
+                    // Login
+                    const data = await apiRequest('/api/auth/login', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            email: document.getElementById('email').value,
+                            password: document.getElementById('password').value,
+                        }),
+                    });
+                    saveAuth(data.token, data.user);
+                    showToast('Login successful!', 'success');
+                    setTimeout(() => redirectByRole(data.user.role), 500);
+                }
+            } catch (err) {
+                showToast(err.message, 'error');
+                btn.textContent = mode === 'login' ? 'Sign In' : 'Create Account';
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>

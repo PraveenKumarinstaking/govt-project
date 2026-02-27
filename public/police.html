@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HAERMS Police Patrol Dashboard">
+    <title>HAERMS — Police Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        .report-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 300;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .report-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 2rem;
+        }
+
+        .report-header {
+            text-align: center;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+        }
+
+        .report-header h2 {
+            color: var(--accent-blue);
+            font-size: 1.4rem;
+        }
+
+        .report-header p {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .report-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .report-section h4 {
+            color: var(--accent-cyan);
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .report-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .report-field {
+            padding: 0.5rem 0.75rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+
+        .report-field .label {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .report-field .value {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .report-badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-excellent {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .badge-good {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+        }
+
+        .badge-needs {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .recommendation-item {
+            padding: 0.5rem 0.75rem;
+            background: rgba(251, 191, 36, 0.08);
+            border-left: 3px solid var(--accent-yellow);
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .timeline-entry {
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .timeline-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            margin-top: 6px;
+            flex-shrink: 0;
+        }
+
+        .case-tab {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+
+        .case-tab button {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .case-tab button.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
+
+        .case-tab-content {
+            display: none;
+        }
+
+        .case-tab-content.active {
+            display: block;
+        }
+
+        .generating {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @media print {
+            body {
+                background: #fff !important;
+                color: #000 !important;
+            }
+
+            .navbar,
+            .report-modal,
+            .btn {
+                display: none !important;
+            }
+
+            .report-container {
+                max-width: 100%;
+                border: none;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand"><span class="icon">🚔</span> Police Dashboard</div>
+        <div class="navbar-actions">
+            <span id="statusBadge"></span>
+            <select class="select" id="myStatus" style="width:auto; padding:0.4rem 0.8rem; font-size:0.8rem;">
+                <option value="AVAILABLE">Available</option>
+                <option value="BUSY">Busy</option>
+                <option value="OFFLINE">Offline</option>
+            </select>
+            <span id="userName" class="text-muted" style="font-size:0.85rem;"></span>
+            <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="dash-header">
+            <h1>🚔 Patrol Unit Dashboard</h1>
+            <p class="dash-subtitle">Monitor, investigate, and resolve highway incidents</p>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid-4 mb-2" id="statsRow">
+            <div class="stat-card">
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">Total Assigned</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statActive">0</div>
+                <div class="stat-label">Active</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statProgress">0</div>
+                <div class="stat-label">In Progress</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statClosed">0</div>
+                <div class="stat-label">Resolved</div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <!-- Map -->
+            <div class="card">
+                <h3 style="margin-bottom:1rem;">📍 Incident Map</h3>
+                <div class="map-container map-large" id="policeMap"></div>
+            </div>
+
+            <!-- Incident List -->
+            <div>
+                <div class="card">
+                    <div class="flex-between" style="margin-bottom:1rem;">
+                        <h3>📋 My Assignments</h3>
+                        <button class="btn btn-ghost btn-sm" onclick="loadIncidents()">🔄 Refresh</button>
+                    </div>
+                    <div id="incidentList">
+                        <div class="text-center">
+                            <div class="spinner" style="margin:2rem auto;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Incident Detail Modal -->
+        <div id="incidentDetail" class="hidden"
+            style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;">
+            <div class="card" style="max-width:700px;width:100%;max-height:85vh;overflow-y:auto;">
+                <div class="flex-between" style="margin-bottom:1rem;">
+                    <h3>🚨 Case Investigation</h3>
+                    <button class="btn btn-ghost btn-sm" onclick="closeDetail()">✕</button>
+                </div>
+                <div id="detailContent"></div>
+            </div>
+        </div>
+
+        <!-- AI Report Modal -->
+        <div id="reportModal" class="hidden report-modal" onclick="event.target===this && closeReport()">
+            <div class="report-container" id="reportContent"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/socket.js"></script>
+    <script>
+        const user = requireAuth(['POLICE']);
+        if (user) {
+            document.getElementById('userName').textContent = user.name;
+            document.getElementById('myStatus').value = user.status || 'AVAILABLE';
+            document.getElementById('statusBadge').innerHTML = statusBadge(user.status || 'AVAILABLE');
+        }
+
+        let policeMap, incidents = [], markers = {};
+
+        // Init map
+        policeMap = L.map('policeMap').setView([13.0827, 80.2707], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(policeMap);
+
+        // Status change
+        document.getElementById('myStatus').addEventListener('change', async (e) => {
+            try {
+                await apiRequest('/api/users/status', { method: 'PATCH', body: JSON.stringify({ status: e.target.value }) });
+                document.getElementById('statusBadge').innerHTML = statusBadge(e.target.value);
+                showToast(`Status updated to ${e.target.value}`, 'success');
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        // Load incidents
+        async function loadIncidents() {
+            try {
+                const data = await apiRequest('/api/incidents');
+                incidents = data.incidents;
+                renderIncidents();
+                updateStats();
+                updateMap();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        function renderIncidents() {
+            const el = document.getElementById('incidentList');
+            if (incidents.length === 0) {
+                el.innerHTML = '<p class="text-muted text-center" style="padding:2rem;">No incidents assigned</p>';
+                return;
+            }
+            el.innerHTML = incidents.map(inc => `
+        <div class="incident-card" style="margin-bottom:0.75rem;cursor:pointer;" onclick="showDetail('${inc._id}')">
+          <div class="incident-header">
+            <span class="incident-type">${inc.accidentType.replace('_', ' ')}</span>
+            ${statusBadge(inc.status)}
+          </div>
+          <div class="incident-meta">
+            📍 ${inc.location.lat.toFixed(4)}, ${inc.location.lng.toFixed(4)} ·
+            ⏰ ${formatDateTime(inc.createdAt)}
+          </div>
+          ${inc.reportedBy ? `<div class="incident-meta mt-1">👤 ${inc.reportedBy.name} ${inc.reportedBy.mobile ? '· 📱 ' + inc.reportedBy.mobile : ''}</div>` : ''}
+        </div>
+      `).join('');
+        }
+
+        function updateStats() {
+            document.getElementById('statTotal').textContent = incidents.length;
+            document.getElementById('statActive').textContent = incidents.filter(i => i.status === 'ASSIGNED').length;
+            document.getElementById('statProgress').textContent = incidents.filter(i => i.status === 'IN_PROGRESS').length;
+            document.getElementById('statClosed').textContent = incidents.filter(i => i.status === 'CLOSED').length;
+        }
+
+        function updateMap() {
+            Object.values(markers).forEach(m => policeMap.removeLayer(m));
+            markers = {};
+            incidents.forEach(inc => {
+                const m = L.marker([inc.location.lat, inc.location.lng], {
+                    icon: L.divIcon({ className: '', html: `<div style="font-size:1.5rem;">${inc.status === 'CLOSED' ? '✅' : '🚨'}</div>`, iconSize: [25, 25] })
+                }).addTo(policeMap).bindPopup(`${inc.accidentType} — ${inc.status}`);
+                markers[inc._id] = m;
+            });
+            if (incidents.length > 0) {
+                const bounds = incidents.map(i => [i.location.lat, i.location.lng]);
+                policeMap.fitBounds(bounds, { padding: [30, 30] });
+            }
+        }
+
+        // Enhanced Detail with Case Investigation
+        function showDetail(id) {
+            const inc = incidents.find(i => i._id === id);
+            if (!inc) return;
+
+            const canProgress = inc.status !== 'CLOSED' && inc.status !== 'PATIENT_ADMITTED';
+            const nextStatus = {
+                ASSIGNED: { label: '🚗 Mark as Arrived', status: 'IN_PROGRESS' },
+                IN_PROGRESS: { label: '✅ Mark as Secured', status: 'CLOSED' },
+            };
+            const action = nextStatus[inc.status];
+            const sevColor = { LOW: '#22c55e', MEDIUM: '#f59e0b', HIGH: '#f97316', CRITICAL: '#ef4444' };
+
+            document.getElementById('detailContent').innerHTML = `
+        <!-- Status & Case Number -->
+        <div class="flex-between mb-2">
+          ${statusBadge(inc.status)}
+          <span class="text-muted" style="font-size:0.8rem;">Case #${inc._id.toString().slice(-6).toUpperCase()}</span>
+        </div>
+
+        <!-- Tabs -->
+        <div class="case-tab">
+          <button class="active" onclick="switchCaseTab('overview',this)">📋 Overview</button>
+          <button onclick="switchCaseTab('reporter',this)">👤 Reporter</button>
+          <button onclick="switchCaseTab('investigation',this)">🔍 Investigation</button>
+          <button onclick="switchCaseTab('timeline',this)">📜 Timeline</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div class="case-tab-content active" id="tab-overview">
+          <div class="incident-card" style="margin-bottom:1rem;">
+            <p><strong>Type:</strong> ${inc.accidentType} · <strong>Severity:</strong> <span style="color:${sevColor[inc.severity] || '#fff'}">${inc.severity}</span></p>
+            <p><strong>Location:</strong> ${inc.location.lat.toFixed(5)}, ${inc.location.lng.toFixed(5)}</p>
+            <p><strong>Reported:</strong> ${formatDateTime(inc.createdAt)}</p>
+          </div>
+          ${inc.assignedAmbulance ? `<div class="incident-card" style="margin-bottom:0.5rem;"><span>🚑 <strong>Ambulance:</strong> ${inc.assignedAmbulance.name}</span></div>` : ''}
+          ${inc.assignedHospital ? `<div class="incident-card" style="margin-bottom:0.5rem;"><span>🏥 <strong>Hospital:</strong> ${inc.assignedHospital.name}</span></div>` : ''}
+          ${inc.patientInfo && inc.patientInfo.condition ? `<div class="incident-card" style="margin-bottom:0.5rem;"><span>🩺 <strong>Patient:</strong> ${inc.patientInfo.condition} ${inc.patientInfo.notes ? '— ' + inc.patientInfo.notes : ''}</span></div>` : ''}
+        </div>
+
+        <!-- Reporter Tab -->
+        <div class="case-tab-content" id="tab-reporter">
+          ${inc.reportedBy ? `
+          <div class="incident-card" style="margin-bottom:1rem;">
+            <h4 style="margin-bottom:0.75rem;color:var(--accent-cyan);">👤 Reporter Information</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+              <div>
+                <div class="text-muted" style="font-size:0.75rem;">Full Name</div>
+                <div style="font-weight:600;">${inc.reportedBy.name}</div>
+              </div>
+              <div>
+                <div class="text-muted" style="font-size:0.75rem;">Email</div>
+                <div>${inc.reportedBy.email}</div>
+              </div>
+              <div>
+                <div class="text-muted" style="font-size:0.75rem;">📱 Mobile</div>
+                <div style="font-weight:600;">${inc.reportedBy.mobile || 'Not provided'}</div>
+              </div>
+              <div>
+                <div class="text-muted" style="font-size:0.75rem;">💼 Occupation</div>
+                <div>${inc.reportedBy.work || 'Not provided'}</div>
+              </div>
+              <div style="grid-column:span 2;">
+                <div class="text-muted" style="font-size:0.75rem;">🏠 Address</div>
+                <div>${inc.reportedBy.address || 'Not provided'}</div>
+              </div>
+            </div>
+          </div>
+          ` : '<p class="text-muted">Reporter details not available</p>'}
+        </div>
+
+        <!-- Investigation Tab -->
+        <div class="case-tab-content" id="tab-investigation">
+          <div class="incident-card" style="margin-bottom:1rem;">
+            <h4 style="margin-bottom:0.75rem;color:var(--accent-cyan);">🔍 Case Investigation Notes</h4>
+            <div class="form-group">
+              <label>📝 Officer Notes</label>
+              <textarea class="input" id="caseNotes" rows="3" placeholder="Describe observations, findings, and actions taken...">${inc.caseNotes || ''}</textarea>
+            </div>
+            <div class="form-group">
+              <label>👥 Witnesses</label>
+              <textarea class="input" id="witnesses" rows="2" placeholder="Witness names, contact numbers, statements...">${inc.witnesses || ''}</textarea>
+            </div>
+            <div class="form-group">
+              <label>📸 Evidence Collected</label>
+              <textarea class="input" id="evidenceCollected" rows="2" placeholder="Photos taken, vehicle info, damage descriptions...">${inc.evidenceCollected || ''}</textarea>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="saveCaseNotes('${inc._id}')">💾 Save Investigation Notes</button>
+          </div>
+        </div>
+
+        <!-- Timeline Tab -->
+        <div class="case-tab-content" id="tab-timeline">
+          <div class="timeline">
+            ${(inc.timeline || []).map(t => `<div class="timeline-item"><div class="timeline-time">${formatDateTime(t.timestamp)}</div><div class="timeline-text">${t.note || t.status}</div></div>`).join('')}
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="margin-top:1.5rem;display:flex;gap:0.75rem;flex-wrap:wrap;">
+          ${action && canProgress ? `<button class="btn btn-success btn-lg" style="flex:1;min-width:200px;" onclick="updateIncidentStatus('${inc._id}','${action.status}')">${action.label}</button>` : ''}
+          <button class="btn btn-primary btn-lg" style="flex:1;min-width:200px;" onclick="generateReport('${inc._id}')">🤖 Generate AI Report</button>
+        </div>
+        ${inc.status === 'CLOSED' ? '<div class="alert-bar alert-success mt-2">✅ This incident has been resolved</div>' : ''}
+      `;
+            document.getElementById('incidentDetail').classList.remove('hidden');
+            document.getElementById('incidentDetail').style.display = 'flex';
+        }
+
+        function switchCaseTab(tabName, btn) {
+            document.querySelectorAll('.case-tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.case-tab button').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            btn.classList.add('active');
+        }
+
+        function closeDetail() {
+            document.getElementById('incidentDetail').classList.add('hidden');
+            document.getElementById('incidentDetail').style.display = 'none';
+        }
+
+        // Save case notes
+        async function saveCaseNotes(id) {
+            try {
+                await apiRequest(`/api/incidents/${id}/notes`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        caseNotes: document.getElementById('caseNotes').value,
+                        witnesses: document.getElementById('witnesses').value,
+                        evidenceCollected: document.getElementById('evidenceCollected').value,
+                    }),
+                });
+                showToast('💾 Investigation notes saved!', 'success');
+                loadIncidents();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        async function updateIncidentStatus(id, status) {
+            try {
+                await apiRequest(`/api/incidents/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, note: `Police: ${status.replace('_', ' ')}` }) });
+                showToast(`Status updated to ${status}`, 'success');
+                closeDetail();
+                loadIncidents();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        // AI Report Generator
+        async function generateReport(id) {
+            const reportModal = document.getElementById('reportModal');
+            const reportContent = document.getElementById('reportContent');
+            reportModal.classList.remove('hidden');
+
+            reportContent.innerHTML = `
+                <div class="text-center" style="padding:3rem;">
+                    <div class="spinner" style="margin:0 auto 1rem;"></div>
+                    <h3 class="generating">🤖 AI Analysis Engine Processing...</h3>
+                    <p class="text-muted mt-1">Analyzing case data, response metrics, and generating report</p>
+                </div>`;
+
+            // Simulate AI processing delay
+            await new Promise(r => setTimeout(r, 1500));
+
+            try {
+                const data = await apiRequest(`/api/incidents/${id}/report`);
+                const r = data.report;
+
+                const perfBadge = r.responseAnalysis.performanceRating === 'Excellent' ? 'badge-excellent' :
+                    r.responseAnalysis.performanceRating === 'Good' ? 'badge-good' : 'badge-needs';
+
+                reportContent.innerHTML = `
+                    <div class="flex-between" style="margin-bottom:1rem;">
+                        <span></span>
+                        <div>
+                            <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨️ Print</button>
+                            <button class="btn btn-ghost btn-sm" onclick="closeReport()">✕</button>
+                        </div>
+                    </div>
+
+                    <div class="report-header">
+                        <h2>📊 ${r.title}</h2>
+                        <p>Generated by ${r.generatedBy} · ${formatDateTime(r.generatedAt)}</p>
+                    </div>
+
+                    <!-- AI Executive Summary -->
+                    ${r.aiSummary ? `
+                    <div class="report-section">
+                        <h4>🧠 AI Executive Summary</h4>
+                        <div class="report-field" style="border-left:3px solid var(--accent-blue);"><div class="value" style="font-size:0.9rem;line-height:1.6;">${r.aiSummary}</div></div>
+                    </div>` : ''}
+
+                    <!-- AI Detailed Analysis -->
+                    ${r.aiAnalysis ? `
+                    <div class="report-section">
+                        <h4>📝 AI Detailed Analysis</h4>
+                        <div class="report-field" style="border-left:3px solid var(--accent-cyan);"><div class="value" style="font-size:0.85rem;line-height:1.6;">${r.aiAnalysis}</div></div>
+                    </div>` : ''}
+
+                    <!-- AI Risk Assessment -->
+                    ${r.aiRiskAssessment ? `
+                    <div class="report-section">
+                        <h4>⚠️ Risk Assessment</h4>
+                        <div class="report-field" style="border-left:3px solid var(--accent-yellow);"><div class="value" style="font-size:0.85rem;line-height:1.6;">${r.aiRiskAssessment}</div></div>
+                    </div>` : ''}
+
+                    <!-- Case Summary -->
+                    <div class="report-section">
+                        <h4>📋 Case Summary</h4>
+                        <div class="report-grid">
+                            <div class="report-field"><div class="label">Case Number</div><div class="value">${r.summary.caseNumber}</div></div>
+                            <div class="report-field"><div class="label">Status</div><div class="value">${r.summary.status}</div></div>
+                            <div class="report-field"><div class="label">Accident Type</div><div class="value">${r.summary.accidentType}</div></div>
+                            <div class="report-field"><div class="label">Severity</div><div class="value">${r.summary.severity}</div></div>
+                            <div class="report-field"><div class="label">Location</div><div class="value">${r.summary.location.lat.toFixed(5)}, ${r.summary.location.lng.toFixed(5)}</div></div>
+                            <div class="report-field"><div class="label">Reported At</div><div class="value">${formatDateTime(r.summary.reportedAt)}</div></div>
+                        </div>
+                    </div>
+
+                    <!-- Reporter Details -->
+                    ${r.reporter ? `
+                    <div class="report-section">
+                        <h4>👤 Reporter Details</h4>
+                        <div class="report-grid">
+                            <div class="report-field"><div class="label">Name</div><div class="value">${r.reporter.name}</div></div>
+                            <div class="report-field"><div class="label">Mobile</div><div class="value">${r.reporter.mobile}</div></div>
+                            <div class="report-field"><div class="label">Email</div><div class="value">${r.reporter.email}</div></div>
+                            <div class="report-field"><div class="label">Occupation</div><div class="value">${r.reporter.occupation}</div></div>
+                            <div class="report-field" style="grid-column:span 2;"><div class="label">Address</div><div class="value">${r.reporter.address}</div></div>
+                        </div>
+                    </div>` : ''}
+
+                    <!-- Assigned Resources -->
+                    <div class="report-section">
+                        <h4>🚔 Assigned Resources</h4>
+                        <div class="report-grid">
+                            ${r.assignedResources.police ? `<div class="report-field"><div class="label">Police Unit</div><div class="value">${r.assignedResources.police.name}</div></div>` : ''}
+                            ${r.assignedResources.ambulance ? `<div class="report-field"><div class="label">Ambulance</div><div class="value">${r.assignedResources.ambulance.name}</div></div>` : ''}
+                            ${r.assignedResources.hospital ? `<div class="report-field"><div class="label">Hospital</div><div class="value">${r.assignedResources.hospital.name}</div></div>` : ''}
+                            ${r.assignedResources.hospital ? `<div class="report-field"><div class="label">Hospital Beds</div><div class="value">${r.assignedResources.hospital.bedsAvailable} / ${r.assignedResources.hospital.totalBeds}</div></div>` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Patient Info -->
+                    <div class="report-section">
+                        <h4>🩺 Patient Information</h4>
+                        <div class="report-grid">
+                            <div class="report-field"><div class="label">Condition</div><div class="value">${r.patientInfo.condition || 'Not assessed'}</div></div>
+                            <div class="report-field"><div class="label">Notes</div><div class="value">${r.patientInfo.notes || 'None'}</div></div>
+                        </div>
+                    </div>
+
+                    <!-- Case Investigation -->
+                    ${r.caseInvestigation.notes || r.caseInvestigation.witnesses || r.caseInvestigation.evidenceCollected ? `
+                    <div class="report-section">
+                        <h4>🔍 Case Investigation</h4>
+                        ${r.caseInvestigation.notes ? `<div class="report-field" style="margin-bottom:0.5rem;"><div class="label">Officer Notes</div><div class="value">${r.caseInvestigation.notes}</div></div>` : ''}
+                        ${r.caseInvestigation.witnesses ? `<div class="report-field" style="margin-bottom:0.5rem;"><div class="label">Witnesses</div><div class="value">${r.caseInvestigation.witnesses}</div></div>` : ''}
+                        ${r.caseInvestigation.evidenceCollected ? `<div class="report-field"><div class="label">Evidence</div><div class="value">${r.caseInvestigation.evidenceCollected}</div></div>` : ''}
+                    </div>` : ''}
+
+                    <!-- AI Response Analysis -->
+                    <div class="report-section">
+                        <h4>🤖 AI Response Analysis</h4>
+                        <div class="report-grid">
+                            <div class="report-field"><div class="label">Response Time</div><div class="value">${r.responseAnalysis.responseTimeSeconds != null ? r.responseAnalysis.responseTimeSeconds + 's' : 'N/A'}</div></div>
+                            <div class="report-field"><div class="label">Time to Arrival</div><div class="value">${r.responseAnalysis.arrivalTimeMinutes != null ? r.responseAnalysis.arrivalTimeMinutes + ' min' : 'N/A'}</div></div>
+                            <div class="report-field"><div class="label">Total Resolution</div><div class="value">${r.responseAnalysis.totalResolutionMinutes != null ? r.responseAnalysis.totalResolutionMinutes + ' min' : 'Ongoing'}</div></div>
+                            <div class="report-field"><div class="label">Performance</div><div class="value"><span class="report-badge ${perfBadge}">${r.responseAnalysis.performanceRating}</span></div></div>
+                        </div>
+                        <div class="report-field mt-1"><div class="value" style="font-size:0.85rem;">${r.responseAnalysis.severityAnalysis}</div></div>
+                    </div>
+
+                    <!-- Timeline -->
+                    <div class="report-section">
+                        <h4>📜 Event Timeline</h4>
+                        ${r.timeline.map(t => `
+                            <div class="timeline-entry">
+                                <div class="timeline-dot"></div>
+                                <div>
+                                    <div style="font-size:0.75rem;color:var(--text-muted);">${formatDateTime(t.time)}</div>
+                                    <div style="font-size:0.85rem;">${t.note || t.status}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <!-- AI Recommendations -->
+                    <div class="report-section">
+                        <h4>💡 AI Recommendations</h4>
+                        ${r.aiRecommendations.map(rec => `<div class="recommendation-item">${rec}</div>`).join('')}
+                    </div>
+
+                    <div class="text-center mt-3" style="padding-top:1rem;border-top:1px solid var(--border);">
+                        <p class="text-muted" style="font-size:0.75rem;">This report was auto-generated by HAERMS AI Analysis Engine v2.0 — Powered by Google Gemini</p>
+                        <p class="text-muted" style="font-size:0.7rem;">Confidential — For authorized personnel only</p>
+                    </div>
+                `;
+            } catch (err) {
+                reportContent.innerHTML = `<div class="text-center" style="padding:2rem;">
+                    <p style="color:var(--accent-red);">❌ Error generating report: ${err.message}</p>
+                    <button class="btn btn-ghost btn-sm mt-2" onclick="closeReport()">Close</button>
+                </div>`;
+            }
+        }
+
+        function closeReport() {
+            document.getElementById('reportModal').classList.add('hidden');
+        }
+
+        // Socket
+        const sock = initSocket('POLICE');
+        sock.on('police:assignment', (data) => {
+            if (data.policeId === user.id) {
+                showToast('🚨 NEW ASSIGNMENT! Check your dashboard.', 'warning');
+                loadIncidents();
+            }
+        });
+        sock.on('incident:updated', () => loadIncidents());
+        sock.on('incident:new', () => loadIncidents());
+
+        // GPS Live Broadcasting
+        let myMarker = null;
+        let myLocation = null;
+
+        function startGPSTracking() {
+            if (!navigator.geolocation) return;
+            navigator.geolocation.watchPosition(
+                (pos) => {
+                    myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    if (myMarker) {
+                        myMarker.setLatLng([myLocation.lat, myLocation.lng]);
+                    } else {
+                        myMarker = L.marker([myLocation.lat, myLocation.lng], {
+                            icon: L.divIcon({
+                                className: '',
+                                html: `<div style="font-size:1.3rem; background:rgba(59,130,246,0.3); border-radius:50%; padding:4px; animation: sosPulse 2s infinite;">🚔</div>`,
+                                iconSize: [30, 30], iconAnchor: [15, 15]
+                            })
+                        }).addTo(policeMap).bindPopup('<b>📍 Your Location</b>');
+                    }
+                    sock.emit('location:update', { userId: user.id, location: myLocation, role: 'POLICE' });
+                    apiRequest('/api/users/location', { method: 'PATCH', body: JSON.stringify(myLocation) }).catch(() => { });
+                },
+                () => { },
+                { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+            );
+        }
+        startGPSTracking();
+        setInterval(() => {
+            if (myLocation && sock.connected) {
+                sock.emit('location:update', { userId: user.id, location: myLocation, role: 'POLICE' });
+            }
+        }, 5000);
+
+        // Initial load
+        loadIncidents();
+    </script>
+</body>
+
+</html>
