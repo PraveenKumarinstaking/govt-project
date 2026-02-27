@@ -3,166 +3,908 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="HAERMS Citizen SOS - Report highway accident emergencies">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>HAERMS — Emergency SOS</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        /* ── App Shell ── */
+        body {
+            overflow: hidden;
+        }
+
+        .app-shell {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #050810;
+        }
+
+        .phone-frame {
+            width: 100%;
+            max-width: 430px;
+            height: 100vh;
+            max-height: 932px;
+            background: var(--bg-primary);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @media (min-width: 500px) {
+            .phone-frame {
+                height: 90vh;
+                border-radius: 40px;
+                border: 3px solid #2a2a3a;
+                box-shadow:
+                    0 0 0 8px #111,
+                    0 30px 80px rgba(0, 0, 0, 0.7),
+                    inset 0 0 30px rgba(0, 0, 0, 0.3);
+            }
+        }
+
+        /* ── Status Bar ── */
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 24px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .status-bar .status-icons {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            font-size: 0.7rem;
+        }
+
+        /* ── Screen Container ── */
+        .screens-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .screen {
+            position: absolute;
+            inset: 0;
+            overflow-y: auto;
+            padding: 0 20px 20px;
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease;
+            will-change: transform, opacity;
+        }
+
+        .screen.active {
+            transform: translateX(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .screen.left {
+            transform: translateX(-100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .screen.right {
+            transform: translateX(100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* ── Bottom Navigation ── */
+        .bottom-nav {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 6px 0 12px;
+            background: rgba(10, 14, 26, 0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border-color);
+            flex-shrink: 0;
+            z-index: 20;
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            padding: 6px 16px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+            border-radius: 12px;
+        }
+
+        .nav-item .nav-icon {
+            font-size: 1.35rem;
+            line-height: 1;
+            transition: transform 0.2s;
+        }
+
+        .nav-item .nav-label {
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: color 0.2s;
+        }
+
+        .nav-item.active .nav-label {
+            color: var(--accent-blue);
+        }
+
+        .nav-item.active .nav-icon {
+            transform: scale(1.15);
+        }
+
+        .nav-item.sos-tab {
+            position: relative;
+            margin-top: -20px;
+        }
+
+        .nav-item.sos-tab .nav-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #ef4444, #b91c1c);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: #fff;
+            font-weight: 900;
+            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+            animation: sosGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes sosGlow {
+
+            0%,
+            100% {
+                box-shadow: 0 4px 20px rgba(239, 68, 68, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 4px 30px rgba(239, 68, 68, 0.7);
+            }
+        }
+
+        .nav-item.sos-tab.active .nav-label {
+            color: var(--accent-red);
+        }
+
+        /* ── Home Indicator ── */
+        .home-indicator {
+            display: none;
+        }
+
+        @media (min-width: 500px) {
+            .home-indicator {
+                display: flex;
+                justify-content: center;
+                padding: 4px 0 6px;
+                flex-shrink: 0;
+                background: rgba(10, 14, 26, 0.95);
+            }
+
+            .home-indicator .bar {
+                width: 134px;
+                height: 5px;
+                border-radius: 3px;
+                background: rgba(255, 255, 255, 0.2);
+            }
+        }
+
+        /* ── Home Screen ── */
+        .welcome-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(168, 85, 247, 0.1));
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 20px;
+            padding: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .welcome-card h2 {
+            font-size: 1.15rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .welcome-card p {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .action-card {
+            background: var(--bg-glass);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.1rem;
+            cursor: pointer;
+            transition: all 0.25s;
+            text-align: center;
+        }
+
+        .action-card:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .action-card .action-icon {
+            font-size: 1.8rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .action-card .action-title {
+            font-weight: 600;
+            font-size: 0.8rem;
+            margin-bottom: 0.15rem;
+        }
+
+        .action-card .action-desc {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .section-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+
+        .info-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            margin-bottom: 0.5rem;
+            font-size: 0.82rem;
+        }
+
+        .info-row .info-icon {
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+
+        .info-row .info-text {
+            flex: 1;
+        }
+
+        .info-row .info-text strong {
+            display: block;
+            font-size: 0.82rem;
+        }
+
+        .info-row .info-text span {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        /* ── SOS Screen ── */
+        .sos-screen-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 1rem;
+        }
+
+        .sos-title {
+            color: var(--accent-red);
+            font-size: 1.25rem;
+            font-weight: 800;
+            margin-bottom: 0.3rem;
+        }
+
+        .sos-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .location-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-color);
+            border-radius: 50px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.25rem;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .location-pill.success {
+            border-color: rgba(34, 197, 94, 0.3);
+            color: var(--accent-green);
+        }
+
+        .location-pill.warning {
+            border-color: rgba(245, 158, 11, 0.3);
+            color: var(--accent-amber);
+        }
+
+        /* SOS Button */
+        .sos-button-area {
+            position: relative;
+            margin: 1rem 0 1.5rem;
+        }
+
+        .mobile-sos-btn {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(145deg, #ef4444, #b91c1c);
+            color: #fff;
+            font-size: 2.2rem;
+            font-weight: 900;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.35);
+            font-family: inherit;
+            letter-spacing: 0.05em;
+            transition: all 0.2s;
+            z-index: 1;
+        }
+
+        .mobile-sos-btn::before {
+            content: '';
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            border: 2px solid rgba(239, 68, 68, 0.3);
+            animation: sosPulse 2s ease-in-out infinite;
+        }
+
+        .mobile-sos-btn::after {
+            content: '';
+            position: absolute;
+            inset: -22px;
+            border-radius: 50%;
+            border: 2px solid rgba(239, 68, 68, 0.15);
+            animation: sosPulse 2s ease-in-out infinite 0.5s;
+        }
+
+        @keyframes sosPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.15);
+                opacity: 0;
+            }
+        }
+
+        .mobile-sos-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .mobile-sos-btn:active {
+            transform: scale(0.95);
+        }
+
+        .sos-options {
+            width: 100%;
+            max-width: 340px;
+        }
+
+        .sos-options .form-group {
+            margin-bottom: 0.85rem;
+        }
+
+        .sos-options label {
+            font-size: 0.78rem;
+        }
+
+        .sos-options .select {
+            border-radius: 14px;
+            padding: 0.7rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        /* ── Tracking Screen ── */
+        .track-alert {
+            padding: 0.75rem 1rem;
+            border-radius: 14px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .track-alert.success {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            color: var(--accent-green);
+        }
+
+        .track-map-container {
+            width: 100%;
+            height: 220px;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            margin-bottom: 0.75rem;
+        }
+
+        .resource-card {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            margin-bottom: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .resource-card:hover {
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .resource-card .res-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .resource-card .res-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .resource-card .res-info .res-name {
+            font-weight: 600;
+            font-size: 0.82rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .resource-card .res-info .res-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.6rem;
+            font-size: 0.65rem;
+            font-weight: 600;
+            border-radius: 50px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .status-chip.new {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+        }
+
+        .status-chip.assigned {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--accent-amber);
+        }
+
+        .status-chip.in-progress {
+            background: rgba(168, 85, 247, 0.15);
+            color: var(--accent-purple);
+        }
+
+        .status-chip.admitted {
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--accent-cyan);
+        }
+
+        .status-chip.closed {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent-green);
+        }
+
+        .status-chip.busy {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+        }
+
+        .mobile-timeline {
+            padding-left: 1.25rem;
+            border-left: 2px solid var(--border-color);
+        }
+
+        .tl-item {
+            position: relative;
+            padding: 0.5rem 0 0.5rem 1rem;
+        }
+
+        .tl-item::before {
+            content: '';
+            position: absolute;
+            left: -1.55rem;
+            top: 0.75rem;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            border: 2px solid var(--bg-primary);
+        }
+
+        .tl-item .tl-time {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+        }
+
+        .tl-item .tl-text {
+            font-size: 0.78rem;
+        }
+
+        /* ── Profile Screen ── */
+        .profile-header {
+            text-align: center;
+            padding: 1.5rem 0;
+        }
+
+        .avatar-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 0.75rem;
+            font-size: 2rem;
+        }
+
+        .profile-header h2 {
+            font-size: 1.15rem;
+            margin-bottom: 0.15rem;
+        }
+
+        .profile-header .role-tag {
+            display: inline-block;
+            padding: 0.2rem 0.7rem;
+            border-radius: 50px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            background: rgba(59, 130, 246, 0.12);
+            color: var(--accent-blue);
+        }
+
+        .profile-field {
+            padding: 0.85rem 1rem;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            margin-bottom: 0.5rem;
+        }
+
+        .profile-field .field-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 0.1rem;
+        }
+
+        .profile-field .field-value {
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .profile-actions {
+            margin-top: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .profile-actions .btn {
+            border-radius: 14px;
+            padding: 0.85rem;
+            width: 100%;
+            justify-content: center;
+        }
+
+        /* Edit mode */
+        .edit-form .form-group {
+            margin-bottom: 0.85rem;
+        }
+
+        .edit-form .input {
+            border-radius: 14px;
+        }
+
+        .edit-form .edit-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .edit-form .edit-actions .btn {
+            flex: 1;
+            border-radius: 14px;
+            padding: 0.85rem;
+        }
+
+        /* ── Empty state ── */
+        .empty-state {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .empty-state .empty-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+        }
+    </style>
 </head>
 
 <body>
-    <nav class="navbar">
-        <div class="navbar-brand">
-            <span class="icon">🚨</span> HAERMS
-        </div>
-        <div class="navbar-actions">
-            <button class="btn btn-ghost btn-sm" onclick="showProfile()" id="profileBtn">👤 <span id="userName"
-                    style="font-size:0.85rem;"></span></button>
-            <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
-        </div>
-    </nav>
-
-    <div class="container">
-        <!-- SOS View (default) -->
-        <div id="sosView">
-            <div class="text-center" style="margin-top: 3rem;">
-                <h1 style="color:var(--accent-red); margin-bottom:0.5rem;">⚠️ Emergency SOS</h1>
-                <p class="text-muted mb-2">Press the SOS button to report a highway accident</p>
-
-                <div id="locationStatus" class="alert-bar alert-info" style="max-width:500px; margin:1rem auto;">
-                    📍 Detecting your location...
-                </div>
-
-                <div class="flex-center" style="margin: 2rem 0;">
-                    <button class="sos-btn" id="sosBtn" onclick="triggerSOS()">SOS</button>
-                </div>
-
-                <div style="max-width:500px; margin:0 auto;">
-                    <div class="form-group">
-                        <label for="accidentType">Accident Type</label>
-                        <select class="select" id="accidentType">
-                            <option value="COLLISION">🚗 Vehicle Collision</option>
-                            <option value="ROLLOVER">🔄 Vehicle Rollover</option>
-                            <option value="PEDESTRIAN">🚶 Pedestrian Hit</option>
-                            <option value="MEDICAL">🏥 Medical Emergency</option>
-                            <option value="FIRE">🔥 Vehicle Fire</option>
-                            <option value="OTHER">❓ Other</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="severity">Severity</label>
-                        <select class="select" id="severity">
-                            <option value="MEDIUM">⚠️ Medium</option>
-                            <option value="HIGH">🔶 High</option>
-                            <option value="CRITICAL">🔴 Critical</option>
-                            <option value="LOW">🟢 Low</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tracking View (after SOS) -->
-        <div id="trackingView" class="hidden">
-            <div class="alert-bar alert-success">
-                ✅ Emergency reported! Help is on the way.
+    <div class="app-shell">
+        <div class="phone-frame">
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <span id="statusTime">10:30</span>
+                <span class="status-icons">
+                    <span>📶</span>
+                    <span>🔋</span>
+                </span>
             </div>
 
-            <div class="grid-2">
-                <div>
-                    <div class="card">
-                        <h3 style="margin-bottom:1rem;">📍 Incident Location</h3>
-                        <div class="map-container" id="trackingMap"></div>
+            <!-- Screens -->
+            <div class="screens-wrapper">
+                <!-- ═══ HOME SCREEN ═══ -->
+                <div class="screen active" id="screenHome" data-index="0">
+                    <div class="welcome-card">
+                        <h2>👋 Hello, <span id="homeUserName">User</span></h2>
+                        <p>Stay safe on the road. Use the SOS button below to report any highway emergency instantly.
+                        </p>
                     </div>
-                </div>
-                <div>
-                    <div class="card" style="margin-bottom:1rem;">
-                        <h3 style="margin-bottom:1rem;">🚔 Assigned Resources</h3>
-                        <div id="assignedResources">
-                            <p class="text-muted">Locating nearest units...</p>
+
+                    <div class="quick-actions">
+                        <div class="action-card" onclick="navigateTo(1)">
+                            <div class="action-icon">🆘</div>
+                            <div class="action-title">Report SOS</div>
+                            <div class="action-desc">Emergency alert</div>
+                        </div>
+                        <div class="action-card" onclick="navigateTo(2)">
+                            <div class="action-icon">📡</div>
+                            <div class="action-title">Track Status</div>
+                            <div class="action-desc">Live updates</div>
+                        </div>
+                        <div class="action-card" onclick="navigateTo(3)">
+                            <div class="action-icon">👤</div>
+                            <div class="action-title">My Profile</div>
+                            <div class="action-desc">Account info</div>
+                        </div>
+                        <div class="action-card" onclick="callEmergency()">
+                            <div class="action-icon">📞</div>
+                            <div class="action-title">Call 112</div>
+                            <div class="action-desc">Emergency line</div>
                         </div>
                     </div>
-                    <div class="card">
-                        <h3 style="margin-bottom:1rem;">📋 Incident Status</h3>
-                        <div id="incidentStatus">
-                            <div class="text-center">
-                                <div class="spinner" style="margin:1rem auto;"></div>
+
+                    <div class="section-title">ℹ️ How It Works</div>
+                    <div class="info-row">
+                        <span class="info-icon">1️⃣</span>
+                        <div class="info-text"><strong>Press SOS</strong><span>Auto-captures your GPS location</span>
+                        </div>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-icon">2️⃣</span>
+                        <div class="info-text"><strong>Help Dispatched</strong><span>Nearest police & ambulance
+                                assigned</span></div>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-icon">3️⃣</span>
+                        <div class="info-text"><strong>Track Live</strong><span>Real-time responder tracking</span>
+                        </div>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-icon">4️⃣</span>
+                        <div class="info-text"><strong>Hospital Notified</strong><span>Admission arranged
+                                automatically</span></div>
+                    </div>
+                </div>
+
+                <!-- ═══ SOS SCREEN ═══ -->
+                <div class="screen right" id="screenSOS" data-index="1">
+                    <div class="sos-screen-content">
+                        <div class="sos-title">⚠️ Emergency SOS</div>
+                        <div class="sos-subtitle">Press the button to report an accident</div>
+
+                        <div class="location-pill" id="locationPill">
+                            📍 Detecting your location...
+                        </div>
+
+                        <div class="sos-button-area">
+                            <button class="mobile-sos-btn" id="sosBtn" onclick="triggerSOS()">SOS</button>
+                        </div>
+
+                        <div class="sos-options">
+                            <div class="form-group">
+                                <label for="accidentType">Accident Type</label>
+                                <select class="select" id="accidentType">
+                                    <option value="COLLISION">🚗 Vehicle Collision</option>
+                                    <option value="ROLLOVER">🔄 Vehicle Rollover</option>
+                                    <option value="PEDESTRIAN">🚶 Pedestrian Hit</option>
+                                    <option value="MEDICAL">🏥 Medical Emergency</option>
+                                    <option value="FIRE">🔥 Vehicle Fire</option>
+                                    <option value="OTHER">❓ Other</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="severity">Severity Level</label>
+                                <select class="select" id="severity">
+                                    <option value="MEDIUM">⚠️ Medium</option>
+                                    <option value="HIGH">🔶 High</option>
+                                    <option value="CRITICAL">🔴 Critical</option>
+                                    <option value="LOW">🟢 Low</option>
+                                </select>
                             </div>
                         </div>
                     </div>
-                    <div class="card mt-2">
-                        <h3 style="margin-bottom:1rem;">📜 Timeline</h3>
-                        <div class="timeline" id="incidentTimeline"></div>
+                </div>
+
+                <!-- ═══ TRACKING SCREEN ═══ -->
+                <div class="screen right" id="screenTrack" data-index="2">
+                    <div id="trackEmptyState" class="empty-state">
+                        <div class="empty-icon">📡</div>
+                        <p>No active incidents</p>
+                        <p style="font-size:0.75rem; color:var(--text-muted); margin-top:0.5rem;">Report an SOS to start
+                            tracking</p>
+                        <button class="btn btn-primary btn-sm" style="margin-top:1rem; border-radius:12px;"
+                            onclick="navigateTo(1)">🆘 Go to SOS</button>
+                    </div>
+
+                    <div id="trackActiveState" class="hidden">
+                        <div class="track-alert success">✅ Emergency reported! Help is on the way.</div>
+
+                        <div class="section-title">📍 Live Map</div>
+                        <div class="track-map-container" id="trackingMap"></div>
+
+                        <div class="section-title">🚔 Assigned Resources</div>
+                        <div id="assignedResources">
+                            <p style="font-size:0.8rem; color:var(--text-muted);">Locating nearest units...</p>
+                        </div>
+
+                        <div class="section-title" style="margin-top:0.75rem;">📋 Status</div>
+                        <div id="incidentStatus">
+                            <div style="text-align:center; padding:1rem;">
+                                <div class="spinner" style="margin:0 auto;"></div>
+                            </div>
+                        </div>
+
+                        <div class="section-title" style="margin-top:0.75rem;">📜 Timeline</div>
+                        <div class="mobile-timeline" id="incidentTimeline"></div>
+                    </div>
+                </div>
+
+                <!-- ═══ PROFILE SCREEN ═══ -->
+                <div class="screen right" id="screenProfile" data-index="3">
+                    <!-- View Mode -->
+                    <div id="profileView">
+                        <div class="profile-header">
+                            <div class="avatar-circle" id="profileAvatar">👤</div>
+                            <h2 id="profileName">Loading...</h2>
+                            <span class="role-tag" id="profileRole">CITIZEN</span>
+                        </div>
+
+                        <div id="profileFields">
+                            <div class="profile-field">
+                                <div class="field-label">📧 Email</div>
+                                <div class="field-value" id="profileEmail">—</div>
+                            </div>
+                            <div class="profile-field">
+                                <div class="field-label">📱 Mobile</div>
+                                <div class="field-value" id="profileMobile">—</div>
+                            </div>
+                            <div class="profile-field">
+                                <div class="field-label">🏠 Address</div>
+                                <div class="field-value" id="profileAddress">—</div>
+                            </div>
+                            <div class="profile-field">
+                                <div class="field-label">💼 Occupation</div>
+                                <div class="field-value" id="profileWork">—</div>
+                            </div>
+                        </div>
+
+                        <div class="profile-actions">
+                            <button class="btn btn-primary" onclick="toggleEditMode()">✏️ Edit Profile</button>
+                            <button class="btn btn-ghost" onclick="logout()" style="color:var(--accent-red);">🚪
+                                Logout</button>
+                        </div>
+                    </div>
+
+                    <!-- Edit Mode -->
+                    <div id="profileEdit" class="hidden edit-form">
+                        <div class="profile-header" style="padding-bottom:0.5rem;">
+                            <h2>✏️ Edit Profile</h2>
+                        </div>
+                        <div class="form-group">
+                            <label>Full Name</label>
+                            <input class="input" type="text" id="editName" placeholder="Your name">
+                        </div>
+                        <div class="form-group">
+                            <label>📱 Mobile Number</label>
+                            <input class="input" type="tel" id="editMobile" placeholder="Your mobile number">
+                        </div>
+                        <div class="form-group">
+                            <label>🏠 Address</label>
+                            <textarea class="input" id="editAddress" rows="2" placeholder="Your address"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>💼 Occupation</label>
+                            <input class="input" type="text" id="editWork" placeholder="Your occupation">
+                        </div>
+                        <div class="edit-actions">
+                            <button class="btn btn-ghost" onclick="toggleEditMode()">Cancel</button>
+                            <button class="btn btn-success" onclick="saveProfile()">💾 Save</button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Profile Modal -->
-    <div id="profileModal" class="hidden"
-        style="position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;"
-        onclick="event.target===this && closeProfile()">
-        <div class="card" style="max-width:500px;width:100%;max-height:85vh;overflow-y:auto;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
-                <h2 style="color:var(--accent-cyan);">👤 My Profile</h2>
-                <button class="btn btn-ghost btn-sm" onclick="closeProfile()">✕</button>
+            <!-- Bottom Navigation -->
+            <div class="bottom-nav">
+                <button class="nav-item active" onclick="navigateTo(0)" id="nav0">
+                    <span class="nav-icon">🏠</span>
+                    <span class="nav-label">Home</span>
+                </button>
+                <button class="nav-item sos-tab" onclick="navigateTo(1)" id="nav1">
+                    <span class="nav-icon">SOS</span>
+                    <span class="nav-label">Emergency</span>
+                </button>
+                <button class="nav-item" onclick="navigateTo(2)" id="nav2">
+                    <span class="nav-icon">📡</span>
+                    <span class="nav-label">Track</span>
+                </button>
+                <button class="nav-item" onclick="navigateTo(3)" id="nav3">
+                    <span class="nav-icon">👤</span>
+                    <span class="nav-label">Profile</span>
+                </button>
             </div>
 
-            <!-- View Mode -->
-            <div id="profileView">
-                <div style="text-align:center;margin-bottom:1.5rem;">
-                    <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--accent-blue),var(--accent-cyan));display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;font-size:2rem;"
-                        id="profileAvatar">👤</div>
-                    <h3 id="profileName" style="margin-bottom:0.25rem;"></h3>
-                    <span class="text-muted" id="profileRole" style="font-size:0.8rem;"></span>
-                </div>
-
-                <div style="display:grid;gap:0.75rem;">
-                    <div style="padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:10px;">
-                        <div class="text-muted" style="font-size:0.75rem;">📧 Email</div>
-                        <div id="profileEmail" style="font-weight:500;"></div>
-                    </div>
-                    <div style="padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:10px;">
-                        <div class="text-muted" style="font-size:0.75rem;">📱 Mobile</div>
-                        <div id="profileMobile" style="font-weight:500;"></div>
-                    </div>
-                    <div style="padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:10px;">
-                        <div class="text-muted" style="font-size:0.75rem;">🏠 Address</div>
-                        <div id="profileAddress" style="font-weight:500;"></div>
-                    </div>
-                    <div style="padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:10px;">
-                        <div class="text-muted" style="font-size:0.75rem;">💼 Occupation</div>
-                        <div id="profileWork" style="font-weight:500;"></div>
-                    </div>
-                </div>
-
-                <button class="btn btn-primary" style="width:100%;margin-top:1.5rem;" onclick="toggleEditMode()">✏️ Edit
-                    Profile</button>
-            </div>
-
-            <!-- Edit Mode -->
-            <div id="profileEdit" class="hidden">
-                <div class="form-group">
-                    <label>Full Name</label>
-                    <input class="input" type="text" id="editName" placeholder="Your name">
-                </div>
-                <div class="form-group">
-                    <label>📱 Mobile Number</label>
-                    <input class="input" type="tel" id="editMobile" placeholder="Your mobile number">
-                </div>
-                <div class="form-group">
-                    <label>🏠 Address</label>
-                    <textarea class="input" id="editAddress" rows="2" placeholder="Your address"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>💼 Occupation</label>
-                    <input class="input" type="text" id="editWork" placeholder="Your occupation">
-                </div>
-                <div style="display:flex;gap:0.75rem;margin-top:1.5rem;">
-                    <button class="btn btn-ghost" style="flex:1;" onclick="toggleEditMode()">Cancel</button>
-                    <button class="btn btn-success" style="flex:1;" onclick="saveProfile()">💾 Save Changes</button>
-                </div>
+            <!-- Home Indicator -->
+            <div class="home-indicator">
+                <div class="bar"></div>
             </div>
         </div>
     </div>
@@ -172,32 +914,83 @@
     <script src="/js/auth.js"></script>
     <script src="/js/socket.js"></script>
     <script>
+        // ── Auth ──
         const user = requireAuth(['CITIZEN']);
         if (user) {
-            document.getElementById('userName').textContent = user.name;
+            document.getElementById('homeUserName').textContent = user.name.split(' ')[0];
         }
 
-        let myLocation = { lat: 13.0827, lng: 80.2707 }; // default Chennai
+        // ── Clock ──
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('statusTime').textContent =
+                now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+        updateClock();
+        setInterval(updateClock, 30000);
+
+        // ── Screen Navigation ──
+        let currentScreen = 0;
+        const screens = [
+            document.getElementById('screenHome'),
+            document.getElementById('screenSOS'),
+            document.getElementById('screenTrack'),
+            document.getElementById('screenProfile'),
+        ];
+        const navItems = [
+            document.getElementById('nav0'),
+            document.getElementById('nav1'),
+            document.getElementById('nav2'),
+            document.getElementById('nav3'),
+        ];
+
+        function navigateTo(index) {
+            if (index === currentScreen) return;
+
+            screens.forEach((s, i) => {
+                s.classList.remove('active', 'left', 'right');
+                if (i < index) s.classList.add('left');
+                else if (i > index) s.classList.add('right');
+                else s.classList.add('active');
+            });
+
+            navItems.forEach((n, i) => {
+                n.classList.toggle('active', i === index);
+            });
+
+            currentScreen = index;
+
+            // Load profile data when switching to profile tab
+            if (index === 3) loadProfile();
+            // Resize map if tracking
+            if (index === 2 && trackingMap) {
+                setTimeout(() => trackingMap.invalidateSize(), 400);
+            }
+        }
+
+        // ── Location ──
+        let myLocation = { lat: 13.0827, lng: 80.2707 };
         let currentIncidentId = null;
         let trackingMap = null;
 
-        // Get GPS location
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
                     myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                    document.getElementById('locationStatus').innerHTML = `📍 Location captured: ${myLocation.lat.toFixed(5)}, ${myLocation.lng.toFixed(5)}`;
-                    document.getElementById('locationStatus').className = 'alert-bar alert-success';
+                    const pill = document.getElementById('locationPill');
+                    pill.innerHTML = `📍 ${myLocation.lat.toFixed(5)}, ${myLocation.lng.toFixed(5)}`;
+                    pill.className = 'location-pill success';
                 },
-                (err) => {
-                    document.getElementById('locationStatus').innerHTML = `⚠️ Using default location (GPS unavailable)`;
-                    document.getElementById('locationStatus').className = 'alert-bar alert-warning';
+                () => {
+                    const pill = document.getElementById('locationPill');
+                    pill.innerHTML = '⚠️ Using default location (GPS unavailable)';
+                    pill.className = 'location-pill warning';
                 },
                 { enableHighAccuracy: true, timeout: 10000 }
             );
         }
 
-        // SOS trigger
+        // ── SOS Trigger ──
         async function triggerSOS() {
             const btn = document.getElementById('sosBtn');
             btn.textContent = '...';
@@ -216,6 +1009,7 @@
                 currentIncidentId = data.incident._id;
                 showToast('🚨 SOS sent! Help is being dispatched.', 'success');
                 showTrackingView(data.incident);
+                navigateTo(2);
             } catch (err) {
                 showToast(err.message, 'error');
                 btn.textContent = 'SOS';
@@ -223,82 +1017,67 @@
             }
         }
 
-        // Live tracking markers
+        // ── Tracking ──
         let policeMarker = null, ambulanceMarker = null, hospitalMarker = null;
         let livePoliceId = null, liveAmbulanceId = null;
         let trackingInterval = null;
 
         function showTrackingView(incident) {
-            document.getElementById('sosView').classList.add('hidden');
-            document.getElementById('trackingView').classList.remove('hidden');
+            document.getElementById('trackEmptyState').classList.add('hidden');
+            document.getElementById('trackActiveState').classList.remove('hidden');
 
-            // Store assigned IDs for live tracking
             livePoliceId = incident.assignedPolice ? (incident.assignedPolice._id || incident.assignedPolice) : null;
             liveAmbulanceId = incident.assignedAmbulance ? (incident.assignedAmbulance._id || incident.assignedAmbulance) : null;
 
-            // Init map
             setTimeout(() => {
+                if (trackingMap) trackingMap.remove();
                 trackingMap = L.map('trackingMap').setView([incident.location.lat, incident.location.lng], 14);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap'
+                    attribution: '© OSM'
                 }).addTo(trackingMap);
 
-                // Incident marker (static red pulse)
+                // Incident marker
                 L.marker([incident.location.lat, incident.location.lng], {
                     icon: L.divIcon({
                         className: '',
-                        html: '<div style="font-size:2rem; filter:drop-shadow(0 0 8px rgba(239,68,68,0.7));">🚨</div>',
-                        iconSize: [30, 30], iconAnchor: [15, 15]
+                        html: '<div style="font-size:1.8rem; filter:drop-shadow(0 0 8px rgba(239,68,68,0.7));">🚨</div>',
+                        iconSize: [28, 28], iconAnchor: [14, 14]
                     })
-                }).addTo(trackingMap).bindPopup('<b>📍 Incident Location</b><br>Your reported emergency');
+                }).addTo(trackingMap).bindPopup('<b>📍 Incident</b>');
 
-                // Police marker (live-tracking)
+                // Police
                 if (incident.assignedPolice && incident.assignedPolice.location) {
                     policeMarker = L.marker([incident.assignedPolice.location.lat, incident.assignedPolice.location.lng], {
-                        icon: L.divIcon({
-                            className: '',
-                            html: '<div style="font-size:1.8rem; filter:drop-shadow(0 0 6px rgba(59,130,246,0.6)); transition:all 0.5s;">🚔</div>',
-                            iconSize: [28, 28], iconAnchor: [14, 14]
-                        })
-                    }).addTo(trackingMap).bindPopup(`<b>🚔 ${incident.assignedPolice.name}</b><br><span id="policeETA">Tracking live...</span>`);
+                        icon: L.divIcon({ className: '', html: '<div style="font-size:1.5rem;">🚔</div>', iconSize: [24, 24], iconAnchor: [12, 12] })
+                    }).addTo(trackingMap).bindPopup(`<b>🚔 ${incident.assignedPolice.name}</b>`);
                 }
 
-                // Ambulance marker (live-tracking)
+                // Ambulance
                 if (incident.assignedAmbulance && incident.assignedAmbulance.location) {
                     ambulanceMarker = L.marker([incident.assignedAmbulance.location.lat, incident.assignedAmbulance.location.lng], {
-                        icon: L.divIcon({
-                            className: '',
-                            html: '<div style="font-size:1.8rem; filter:drop-shadow(0 0 6px rgba(34,197,94,0.6)); transition:all 0.5s;">🚑</div>',
-                            iconSize: [28, 28], iconAnchor: [14, 14]
-                        })
-                    }).addTo(trackingMap).bindPopup(`<b>🚑 ${incident.assignedAmbulance.name}</b><br><span id="ambETA">Tracking live...</span>`);
+                        icon: L.divIcon({ className: '', html: '<div style="font-size:1.5rem;">🚑</div>', iconSize: [24, 24], iconAnchor: [12, 12] })
+                    }).addTo(trackingMap).bindPopup(`<b>🚑 ${incident.assignedAmbulance.name}</b>`);
                 }
 
-                // Hospital marker
+                // Hospital
                 if (incident.assignedHospital && incident.assignedHospital.location) {
                     hospitalMarker = L.marker([incident.assignedHospital.location.lat, incident.assignedHospital.location.lng], {
-                        icon: L.divIcon({
-                            className: '',
-                            html: '<div style="font-size:1.5rem;">🏥</div>',
-                            iconSize: [24, 24], iconAnchor: [12, 12]
-                        })
-                    }).addTo(trackingMap).bindPopup(`<b>🏥 ${incident.assignedHospital.name}</b><br>${incident.assignedHospital.availableBeds} beds available`);
+                        icon: L.divIcon({ className: '', html: '<div style="font-size:1.3rem;">🏥</div>', iconSize: [20, 20], iconAnchor: [10, 10] })
+                    }).addTo(trackingMap).bindPopup(`<b>🏥 ${incident.assignedHospital.name}</b>`);
                 }
 
-                // Fit all markers in view
+                // Fit bounds
                 const bounds = [[incident.location.lat, incident.location.lng]];
                 if (policeMarker) bounds.push(policeMarker.getLatLng());
                 if (ambulanceMarker) bounds.push(ambulanceMarker.getLatLng());
                 if (hospitalMarker) bounds.push(hospitalMarker.getLatLng());
-                if (bounds.length > 1) trackingMap.fitBounds(bounds, { padding: [40, 40] });
-
-            }, 200);
+                if (bounds.length > 1) trackingMap.fitBounds(bounds, { padding: [30, 30] });
+            }, 400);
 
             updateResources(incident);
             updateTimeline(incident);
             updateStatus(incident);
 
-            // Start live polling for incident updates every 5s
             trackingInterval = setInterval(async () => {
                 if (!currentIncidentId) return;
                 try {
@@ -309,46 +1088,35 @@
                         updateTimeline(data.incident);
                         updateLiveMarkers(data.incident);
                     }
-                } catch (e) { /* silent retry */ }
+                } catch (e) { }
             }, 5000);
         }
 
-        // Smoothly move markers to new positions
         function updateLiveMarkers(incident) {
             if (!trackingMap) return;
-
             if (policeMarker && incident.assignedPolice && incident.assignedPolice.location) {
-                const newPos = [incident.assignedPolice.location.lat, incident.assignedPolice.location.lng];
-                animateMarker(policeMarker, newPos);
-                const dist = calcDist(incident.location, incident.assignedPolice.location);
-                policeMarker.setPopupContent(`<b>🚔 ${incident.assignedPolice.name}</b><br>📏 ${dist} km away`);
+                animateMarker(policeMarker, [incident.assignedPolice.location.lat, incident.assignedPolice.location.lng]);
             }
-
             if (ambulanceMarker && incident.assignedAmbulance && incident.assignedAmbulance.location) {
-                const newPos = [incident.assignedAmbulance.location.lat, incident.assignedAmbulance.location.lng];
-                animateMarker(ambulanceMarker, newPos);
-                const dist = calcDist(incident.location, incident.assignedAmbulance.location);
-                ambulanceMarker.setPopupContent(`<b>🚑 ${incident.assignedAmbulance.name}</b><br>📏 ${dist} km away`);
+                animateMarker(ambulanceMarker, [incident.assignedAmbulance.location.lat, incident.assignedAmbulance.location.lng]);
             }
         }
 
-        // Animate marker movement for smooth tracking
         function animateMarker(marker, newLatLng, duration = 1000) {
             const start = marker.getLatLng();
             const startTime = performance.now();
-
             function step(timestamp) {
                 const progress = Math.min((timestamp - startTime) / duration, 1);
-                const ease = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress; // easeInOut
-                const lat = start.lat + (newLatLng[0] - start.lat) * ease;
-                const lng = start.lng + (newLatLng[1] - start.lng) * ease;
-                marker.setLatLng([lat, lng]);
+                const ease = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
+                marker.setLatLng([
+                    start.lat + (newLatLng[0] - start.lat) * ease,
+                    start.lng + (newLatLng[1] - start.lng) * ease
+                ]);
                 if (progress < 1) requestAnimationFrame(step);
             }
             requestAnimationFrame(step);
         }
 
-        // Simple distance calc for display
         function calcDist(loc1, loc2) {
             const R = 6371;
             const dLat = (loc2.lat - loc1.lat) * Math.PI / 180;
@@ -361,99 +1129,80 @@
             const el = document.getElementById('assignedResources');
             let html = '';
             if (incident.assignedPolice) {
-                const dist = incident.assignedPolice.location ?
-                    calcDist(incident.location, incident.assignedPolice.location) : '?';
-                html += `<div class="incident-card" style="margin-bottom:0.5rem;">
-          <div class="flex-between"><span>🚔 ${incident.assignedPolice.name}</span>${statusBadge(incident.assignedPolice.status || 'BUSY')}</div>
-          <div class="text-muted" style="font-size:0.8rem; margin-top:0.25rem;">📏 ${dist} km away · 📡 Live tracking</div>
-        </div>`;
+                const dist = incident.assignedPolice.location ? calcDist(incident.location, incident.assignedPolice.location) : '?';
+                html += `<div class="resource-card">
+                    <span class="res-icon">🚔</span>
+                    <div class="res-info">
+                        <div class="res-name">${incident.assignedPolice.name}</div>
+                        <div class="res-meta">📏 ${dist} km · 📡 Live</div>
+                    </div>
+                    <span class="status-chip busy">${incident.assignedPolice.status || 'BUSY'}</span>
+                </div>`;
             }
             if (incident.assignedAmbulance) {
-                const dist = incident.assignedAmbulance.location ?
-                    calcDist(incident.location, incident.assignedAmbulance.location) : '?';
-                html += `<div class="incident-card" style="margin-bottom:0.5rem;">
-          <div class="flex-between"><span>🚑 ${incident.assignedAmbulance.name}</span>${statusBadge(incident.assignedAmbulance.status || 'BUSY')}</div>
-          <div class="text-muted" style="font-size:0.8rem; margin-top:0.25rem;">📏 ${dist} km away · 📡 Live tracking</div>
-        </div>`;
+                const dist = incident.assignedAmbulance.location ? calcDist(incident.location, incident.assignedAmbulance.location) : '?';
+                html += `<div class="resource-card">
+                    <span class="res-icon">🚑</span>
+                    <div class="res-info">
+                        <div class="res-name">${incident.assignedAmbulance.name}</div>
+                        <div class="res-meta">📏 ${dist} km · 📡 Live</div>
+                    </div>
+                    <span class="status-chip busy">${incident.assignedAmbulance.status || 'BUSY'}</span>
+                </div>`;
             }
             if (incident.assignedHospital) {
-                const dist = incident.assignedHospital.location ?
-                    calcDist(incident.location, incident.assignedHospital.location) : '?';
-                html += `<div class="incident-card" style="margin-bottom:0.5rem;">
-          <div class="flex-between"><span>🏥 ${incident.assignedHospital.name}</span><span class="text-muted">${incident.assignedHospital.availableBeds} beds</span></div>
-          <div class="text-muted" style="font-size:0.8rem; margin-top:0.25rem;">📏 ${dist} km away</div>
-        </div>`;
+                const dist = incident.assignedHospital.location ? calcDist(incident.location, incident.assignedHospital.location) : '?';
+                html += `<div class="resource-card">
+                    <span class="res-icon">🏥</span>
+                    <div class="res-info">
+                        <div class="res-name">${incident.assignedHospital.name}</div>
+                        <div class="res-meta">📏 ${dist} km · ${incident.assignedHospital.availableBeds || '?'} beds</div>
+                    </div>
+                </div>`;
             }
-            if (!html) html = '<p class="text-muted">Assigning resources...</p>';
+            if (!html) html = '<p style="font-size:0.8rem; color:var(--text-muted);">Assigning resources...</p>';
             el.innerHTML = html;
         }
 
         function updateStatus(incident) {
-            const statusIcons = { NEW: '🆕', ASSIGNED: '📋', IN_PROGRESS: '🚗', PATIENT_ADMITTED: '🏥', CLOSED: '✅' };
+            const icons = { NEW: '🆕', ASSIGNED: '📋', IN_PROGRESS: '🚗', PATIENT_ADMITTED: '🏥', CLOSED: '✅' };
+            const statusClass = incident.status.toLowerCase().replace('_', '-');
+            const messages = {
+                NEW: '⏳ Processing your emergency...',
+                ASSIGNED: '📡 Units dispatched. Tracking in real-time.',
+                IN_PROGRESS: '🚗 Responders are on scene.',
+                PATIENT_ADMITTED: '🏥 Patient admitted. Medical care in progress.',
+                CLOSED: '✅ Incident resolved. You are safe.',
+            };
             document.getElementById('incidentStatus').innerHTML = `
-        <div class="flex-between">
-          <span>${statusIcons[incident.status] || '📋'} Current Status</span>
-          ${statusBadge(incident.status)}
-        </div>
-        <p class="text-muted mt-1" style="font-size:0.8rem;">Incident ID: ${incident._id}</p>
-        <div class="alert-bar ${incident.status === 'CLOSED' ? 'alert-success' : 'alert-info'} mt-1" style="font-size:0.8rem;">
-          ${incident.status === 'CLOSED' ? '✅ Incident resolved. You are safe.' :
-                    incident.status === 'PATIENT_ADMITTED' ? '🏥 Patient admitted. Medical care in progress.' :
-                        incident.status === 'IN_PROGRESS' ? '🚗 Responders are on scene.' :
-                            incident.status === 'ASSIGNED' ? '📡 Units dispatched. Tracking in real-time.' : '⏳ Processing your emergency...'}
-        </div>
-      `;
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                    <span style="font-size:0.82rem;">${icons[incident.status] || '📋'} Current Status</span>
+                    <span class="status-chip ${statusClass}">${incident.status.replace('_', ' ')}</span>
+                </div>
+                <div class="track-alert ${incident.status === 'CLOSED' ? 'success' : ''}"
+                     style="${incident.status !== 'CLOSED' ? 'background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.15); color:var(--accent-blue);' : ''}">
+                    ${messages[incident.status] || ''}
+                </div>
+                <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.25rem;">ID: ${incident._id}</div>
+            `;
         }
 
         function updateTimeline(incident) {
             const el = document.getElementById('incidentTimeline');
             if (!incident.timeline || incident.timeline.length === 0) {
-                el.innerHTML = '<p class="text-muted">No updates yet</p>';
+                el.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No updates yet</p>';
                 return;
             }
             el.innerHTML = incident.timeline.map(t => `
-        <div class="timeline-item">
-          <div class="timeline-time">${formatDateTime(t.timestamp)}</div>
-          <div class="timeline-text">${t.note || t.status}</div>
-        </div>
-      `).join('');
+                <div class="tl-item">
+                    <div class="tl-time">${formatDateTime(t.timestamp)}</div>
+                    <div class="tl-text">${t.note || t.status}</div>
+                </div>
+            `).join('');
         }
 
-        // Socket.IO real-time updates
-        const sock = initSocket('CITIZEN');
-
-        // Live incident status changes
-        sock.on('incident:updated', (incident) => {
-            if (currentIncidentId && incident._id === currentIncidentId) {
-                updateResources(incident);
-                updateTimeline(incident);
-                updateStatus(incident);
-                updateLiveMarkers(incident);
-                showToast(`Status updated: ${incident.status.replace('_', ' ')}`, 'info');
-
-                if (incident.status === 'CLOSED' && trackingInterval) {
-                    clearInterval(trackingInterval);
-                }
-            }
-        });
-
-        // Live location updates from responders
-        sock.on('user:locationUpdate', (data) => {
-            if (!trackingMap) return;
-            if (data.userId === livePoliceId && policeMarker) {
-                animateMarker(policeMarker, [data.location.lat, data.location.lng]);
-            }
-            if (data.userId === liveAmbulanceId && ambulanceMarker) {
-                animateMarker(ambulanceMarker, [data.location.lat, data.location.lng]);
-            }
-        });
-
-        // ── Profile Functions ──
-        async function showProfile() {
-            document.getElementById('profileModal').classList.remove('hidden');
-            document.getElementById('profileModal').style.display = 'flex';
-            document.getElementById('profileView').classList.remove('hidden');
-            document.getElementById('profileEdit').classList.add('hidden');
+        // ── Profile ──
+        async function loadProfile() {
             try {
                 const data = await apiRequest('/api/users/profile');
                 const p = data.user;
@@ -463,7 +1212,6 @@
                 document.getElementById('profileMobile').textContent = p.mobile || 'Not provided';
                 document.getElementById('profileAddress').textContent = p.address || 'Not provided';
                 document.getElementById('profileWork').textContent = p.work || 'Not provided';
-                // Pre-fill edit fields
                 document.getElementById('editName').value = p.name || '';
                 document.getElementById('editMobile').value = p.mobile || '';
                 document.getElementById('editAddress').value = p.address || '';
@@ -471,16 +1219,9 @@
             } catch (err) { showToast(err.message, 'error'); }
         }
 
-        function closeProfile() {
-            document.getElementById('profileModal').classList.add('hidden');
-            document.getElementById('profileModal').style.display = 'none';
-        }
-
         function toggleEditMode() {
-            const view = document.getElementById('profileView');
-            const edit = document.getElementById('profileEdit');
-            view.classList.toggle('hidden');
-            edit.classList.toggle('hidden');
+            document.getElementById('profileView').classList.toggle('hidden');
+            document.getElementById('profileEdit').classList.toggle('hidden');
         }
 
         async function saveProfile() {
@@ -495,18 +1236,45 @@
                     method: 'PATCH',
                     body: JSON.stringify(body),
                 });
-                // Update localStorage user
                 const stored = JSON.parse(localStorage.getItem('haerms_user') || '{}');
                 stored.name = data.user.name;
-                stored.mobile = data.user.mobile;
-                stored.address = data.user.address;
-                stored.work = data.user.work;
                 localStorage.setItem('haerms_user', JSON.stringify(stored));
-                document.getElementById('userName').textContent = data.user.name;
-                showToast('✅ Profile updated successfully!', 'success');
-                showProfile(); // refresh view
+                document.getElementById('homeUserName').textContent = data.user.name.split(' ')[0];
+                showToast('✅ Profile updated!', 'success');
+                toggleEditMode();
+                loadProfile();
             } catch (err) { showToast(err.message, 'error'); }
         }
+
+        function callEmergency() {
+            window.open('tel:112');
+        }
+
+        // ── Socket.IO ──
+        const sock = initSocket('CITIZEN');
+
+        sock.on('incident:updated', (incident) => {
+            if (currentIncidentId && incident._id === currentIncidentId) {
+                updateResources(incident);
+                updateTimeline(incident);
+                updateStatus(incident);
+                updateLiveMarkers(incident);
+                showToast(`Status: ${incident.status.replace('_', ' ')}`, 'info');
+                if (incident.status === 'CLOSED' && trackingInterval) {
+                    clearInterval(trackingInterval);
+                }
+            }
+        });
+
+        sock.on('user:locationUpdate', (data) => {
+            if (!trackingMap) return;
+            if (data.userId === livePoliceId && policeMarker) {
+                animateMarker(policeMarker, [data.location.lat, data.location.lng]);
+            }
+            if (data.userId === liveAmbulanceId && ambulanceMarker) {
+                animateMarker(ambulanceMarker, [data.location.lat, data.location.lng]);
+            }
+        });
     </script>
 </body>
 

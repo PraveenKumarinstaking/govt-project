@@ -3,30 +3,145 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="HAERMS - Highway Accident Emergency Response Management System Login">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="HAERMS - Highway Accident Emergency Response Management System">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>HAERMS — Login</title>
     <link rel="stylesheet" href="/css/style.css">
     <style>
+        /* ── Mobile App Frame ── */
+        .app-shell {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #050810;
+        }
+
+        .phone-frame {
+            width: 100%;
+            max-width: 430px;
+            height: 100vh;
+            max-height: 932px;
+            background: var(--bg-primary);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* On desktop, show phone bezel */
+        @media (min-width: 500px) {
+            .phone-frame {
+                height: 90vh;
+                border-radius: 40px;
+                border: 3px solid #2a2a3a;
+                box-shadow:
+                    0 0 0 8px #111,
+                    0 30px 80px rgba(0, 0, 0, 0.7),
+                    inset 0 0 30px rgba(0, 0, 0, 0.3);
+            }
+        }
+
+        /* ── Status Bar ── */
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 24px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex-shrink: 0;
+            background: transparent;
+            z-index: 10;
+        }
+
+        .status-bar .status-icons {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            font-size: 0.7rem;
+        }
+
+        /* ── Main Content Area ── */
+        .app-content {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            padding: 0 24px 40px;
+        }
+
+        /* ── Splash / Brand ── */
+        .splash-section {
+            text-align: center;
+            padding: 2rem 0 1.5rem;
+        }
+
+        .app-icon {
+            width: 90px;
+            height: 90px;
+            border-radius: 24px;
+            background: linear-gradient(145deg, #ef4444, #b91c1c);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            margin: 0 auto 1.25rem;
+            box-shadow: 0 10px 40px rgba(239, 68, 68, 0.3);
+            animation: iconFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes iconFloat {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-6px);
+            }
+        }
+
+        .splash-section h1 {
+            font-size: 1.75rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .splash-section .tagline {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            font-weight: 400;
+        }
+
+        /* ── Tab Switch ── */
         .tab-switch {
             display: flex;
             gap: 0;
             margin-bottom: 1.5rem;
-            border-radius: 10px;
+            border-radius: 12px;
             overflow: hidden;
-            border: 1px solid var(--border);
+            border: 1px solid var(--border-color);
+            background: var(--bg-glass);
         }
 
         .tab-switch button {
             flex: 1;
-            padding: 0.65rem;
+            padding: 0.7rem;
             background: transparent;
             border: none;
             color: var(--text-muted);
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s;
+            font-family: inherit;
         }
 
         .tab-switch button.active {
@@ -34,8 +149,20 @@
             color: #fff;
         }
 
-        .tab-switch button:hover:not(.active) {
-            background: rgba(255, 255, 255, 0.05);
+        /* ── Form Styles ── */
+        .mobile-form .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .mobile-form .input {
+            padding: 0.85rem 1rem;
+            border-radius: 14px;
+            font-size: 0.9rem;
+        }
+
+        .mobile-form label {
+            font-size: 0.8rem;
+            margin-bottom: 0.4rem;
         }
 
         .form-row {
@@ -44,91 +171,221 @@
             gap: 0.75rem;
         }
 
-        @media (max-width: 480px) {
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-        }
-
         .register-fields {
             display: none;
         }
 
         .register-fields.show {
             display: block;
+            animation: fadeSlideUp 0.3s ease;
+        }
+
+        @keyframes fadeSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ── Submit button ── */
+        .btn-submit {
+            width: 100%;
+            padding: 0.95rem;
+            border-radius: 14px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-blue), #2563eb);
+            color: #fff;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.3s;
+            box-shadow: 0 6px 24px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-submit:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        .btn-submit:active {
+            transform: scale(0.98);
+        }
+
+        /* ── Demo Bar ── */
+        .demo-section {
+            margin-top: 1.5rem;
+            text-align: center;
+        }
+
+        .demo-section p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .demo-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        .demo-chip {
+            padding: 0.4rem 0.85rem;
+            border-radius: 50px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .demo-chip:hover {
+            background: var(--bg-glass-hover);
+            color: var(--text-primary);
+            border-color: var(--accent-blue);
+        }
+
+        /* ── Bottom safe area ── */
+        .bottom-safe {
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        /* ── Home indicator (for phone look) ── */
+        .home-indicator {
+            display: none;
+        }
+
+        @media (min-width: 500px) {
+            .home-indicator {
+                display: flex;
+                justify-content: center;
+                padding: 8px 0 6px;
+                flex-shrink: 0;
+            }
+
+            .home-indicator .bar {
+                width: 134px;
+                height: 5px;
+                border-radius: 3px;
+                background: rgba(255, 255, 255, 0.2);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div class="login-wrapper">
-        <div class="card login-card" style="max-width: 440px;">
-            <div class="login-header">
-                <div class="logo-icon">🚨</div>
-                <h1>HAERMS</h1>
-                <p>Highway Accident Emergency Response</p>
+    <div class="app-shell">
+        <div class="phone-frame">
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <span id="statusTime">10:30</span>
+                <span class="status-icons">
+                    <span>📶</span>
+                    <span>🔋</span>
+                </span>
             </div>
 
-            <!-- Tab Switch -->
-            <div class="tab-switch">
-                <button id="tabLogin" class="active" onclick="switchTab('login')">Sign In</button>
-                <button id="tabRegister" onclick="switchTab('register')">Register</button>
+            <!-- Content -->
+            <div class="app-content">
+                <!-- Splash -->
+                <div class="splash-section">
+                    <div class="app-icon">🚨</div>
+                    <h1>HAERMS</h1>
+                    <p class="tagline">Highway Accident Emergency Response</p>
+                </div>
+
+                <!-- Tab Switch -->
+                <div class="tab-switch">
+                    <button id="tabLogin" class="active" onclick="switchTab('login')">Sign In</button>
+                    <button id="tabRegister" onclick="switchTab('register')">Register</button>
+                </div>
+
+                <!-- Auth Form -->
+                <form id="authForm" class="mobile-form">
+                    <!-- Register-only fields -->
+                    <div class="register-fields" id="registerFields">
+                        <div class="form-group">
+                            <label for="regName">👤 Full Name</label>
+                            <input class="input" type="text" id="regName" placeholder="Enter your full name">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="regMobile">📱 Mobile</label>
+                                <input class="input" type="tel" id="regMobile" placeholder="9876543210">
+                            </div>
+                            <div class="form-group">
+                                <label for="regWork">💼 Occupation</label>
+                                <input class="input" type="text" id="regWork" placeholder="Driver, etc">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="regAddress">🏠 Address</label>
+                            <input class="input" type="text" id="regAddress" placeholder="Your address">
+                        </div>
+                    </div>
+
+                    <!-- Common fields -->
+                    <div class="form-group">
+                        <label for="email">✉️ Email</label>
+                        <input class="input" type="email" id="email" placeholder="Enter your email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">🔒 Password</label>
+                        <input class="input" type="password" id="password" placeholder="Enter your password" required>
+                    </div>
+
+                    <button type="submit" class="btn-submit" id="authBtn">Sign In</button>
+                </form>
+
+                <!-- Demo Accounts -->
+                <div class="demo-section">
+                    <p>Demo Accounts (password: <strong>1234</strong>)</p>
+                    <div class="demo-grid">
+                        <button class="demo-chip" data-email="citizen@demo.com">🧑 Citizen</button>
+                        <button class="demo-chip" data-email="police1@demo.com">🚔 Police</button>
+                        <button class="demo-chip" data-email="ambulance1@demo.com">🚑 Ambulance</button>
+                        <button class="demo-chip" data-email="hospital@demo.com">🏥 Hospital</button>
+                        <button class="demo-chip" data-email="admin@demo.com">👑 Admin</button>
+                    </div>
+                </div>
             </div>
 
-            <form id="authForm">
-                <!-- Register-only fields -->
-                <div class="register-fields" id="registerFields">
-                    <div class="form-group">
-                        <label for="regName">👤 Full Name</label>
-                        <input class="input" type="text" id="regName" placeholder="Enter your full name">
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="regMobile">📱 Mobile Number</label>
-                            <input class="input" type="tel" id="regMobile" placeholder="e.g. 9876543210">
-                        </div>
-                        <div class="form-group">
-                            <label for="regWork">💼 Occupation</label>
-                            <input class="input" type="text" id="regWork" placeholder="e.g. Driver, Teacher">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="regAddress">🏠 Address</label>
-                        <input class="input" type="text" id="regAddress" placeholder="Enter your address">
-                    </div>
-                </div>
-
-                <!-- Common fields -->
-                <div class="form-group">
-                    <label for="email">✉️ Email</label>
-                    <input class="input" type="email" id="email" placeholder="Enter your email" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">🔒 Password</label>
-                    <input class="input" type="password" id="password" placeholder="Enter your password" required>
-                </div>
-
-                <button type="submit" class="btn btn-primary btn-lg" style="width:100%" id="authBtn">
-                    Sign In
-                </button>
-            </form>
-
-            <div class="mt-3 text-center" style="font-size:0.8rem; color:var(--text-muted);">
-                <p style="margin-bottom:0.75rem;">Demo Accounts (password: <strong>1234</strong>)</p>
-                <div style="display:flex; flex-wrap:wrap; gap:0.5rem; justify-content:center;">
-                    <button class="btn btn-ghost btn-sm demo-btn" data-email="citizen@demo.com">Citizen</button>
-                    <button class="btn btn-ghost btn-sm demo-btn" data-email="police1@demo.com">Police</button>
-                    <button class="btn btn-ghost btn-sm demo-btn" data-email="ambulance1@demo.com">Ambulance</button>
-                    <button class="btn btn-ghost btn-sm demo-btn" data-email="hospital@demo.com">Hospital</button>
-                    <button class="btn btn-ghost btn-sm demo-btn" data-email="admin@demo.com">Admin</button>
-                </div>
+            <!-- Home Indicator -->
+            <div class="home-indicator">
+                <div class="bar"></div>
             </div>
         </div>
     </div>
 
     <script src="/js/auth.js"></script>
     <script>
-        let mode = 'login'; // 'login' or 'register'
+        let mode = 'login';
+
+        // Update status bar time
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('statusTime').textContent =
+                now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+        updateClock();
+        setInterval(updateClock, 30000);
 
         // If already logged in, redirect
         const existing = getUser();
@@ -146,7 +403,6 @@
                 btn.textContent = 'Create Account';
                 tabRegister.classList.add('active');
                 tabLogin.classList.remove('active');
-                // Make register fields required
                 document.getElementById('regName').required = true;
                 document.getElementById('regMobile').required = true;
             } else {
@@ -160,7 +416,7 @@
         }
 
         // Demo buttons
-        document.querySelectorAll('.demo-btn').forEach(btn => {
+        document.querySelectorAll('.demo-chip').forEach(btn => {
             btn.addEventListener('click', () => {
                 switchTab('login');
                 document.getElementById('email').value = btn.dataset.email;
@@ -177,7 +433,6 @@
 
             try {
                 if (mode === 'register') {
-                    // Register
                     const data = await apiRequest('/api/auth/register', {
                         method: 'POST',
                         body: JSON.stringify({
@@ -194,7 +449,6 @@
                     showToast('✅ Account created! Welcome to HAERMS.', 'success');
                     setTimeout(() => redirectByRole(data.user.role), 500);
                 } else {
-                    // Login
                     const data = await apiRequest('/api/auth/login', {
                         method: 'POST',
                         body: JSON.stringify({
